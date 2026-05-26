@@ -52,8 +52,23 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
     #expect(entity != nil, "Entity.from3DAsset should dispatch GLB to the GLTF loader and return a non-nil entity")
 }
 
+@Test func testUnifiedLoaderDispatchesGLBFromData() async throws {
+    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
+    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        throw URLError(.badServerResponse)
+    }
+
+    let entity = await Entity.from3DAsset(data: data, format: "glb")
+    #expect(entity != nil, "Entity.from3DAsset(data:format:) should dispatch GLB to the GLTF loader and return a non-nil entity")
+}
+
 @Test func testUnifiedLoaderRejectsUnsupportedExtension() async {
     let fakeURL = URL(fileURLWithPath: "/tmp/model.xyz")
     let entity = await Entity.from3DAsset(url: fakeURL)
     #expect(entity == nil, "Entity.from3DAsset should return nil for an unsupported file extension")
+}
+
+@Test func testUnifiedLoaderDataRejectsUnsupportedFormat() async {
+    let entity = await Entity.from3DAsset(data: Data(), format: "xyz")
+    #expect(entity == nil, "Entity.from3DAsset(data:format:) should return nil for an unsupported format")
 }
