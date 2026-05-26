@@ -48,12 +48,12 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
     let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
-    let entity = await loadEntity(from: tempURL)
-    #expect(entity != nil, "loadEntity should dispatch GLB to the GLTF loader and return a non-nil entity")
+    let entity = await Entity.from3DAsset(url: tempURL)
+    #expect(entity != nil, "Entity.from3DAsset should dispatch GLB to the GLTF loader and return a non-nil entity")
 }
 
 @Test func testUnifiedLoaderRejectsUnsupportedExtension() async {
     let fakeURL = URL(fileURLWithPath: "/tmp/model.xyz")
-    let entity = await loadEntity(from: fakeURL)
-    #expect(entity == nil, "loadEntity should return nil for an unsupported file extension")
+    let entity = await Entity.from3DAsset(url: fakeURL)
+    #expect(entity == nil, "Entity.from3DAsset should return nil for an unsupported file extension")
 }

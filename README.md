@@ -17,7 +17,7 @@ Swift package providing RealityKit entity loaders for STL, OBJ, DAE, and GLB/GLT
 ## Requirements
 
 - iOS 18+ / macOS 15+
-- Swift 5.9+
+- Swift 6.0+
 
 ## Installation
 
@@ -33,20 +33,18 @@ Then add `RealityKitFormats` to your target dependencies.
 
 ### Unified loader (recommended)
 
-`loadEntity(from:)` dispatches automatically based on the file extension:
+`Entity.from3DAsset(url:)` dispatches automatically based on the file extension:
 
 ```swift
 import RealityKitFormats
 
-let entity = await loadEntity(from: url)
+let entity = await Entity.from3DAsset(url: url)
 ```
 
-`ModelEntity` is a subclass of `Entity`, so the result can be cast down if you know the format produces a single mesh:
+`ModelEntity` is a subclass of `Entity`, so cast the result if you need it:
 
 ```swift
-if let model = entity as? ModelEntity {
-    // ...
-}
+let model = await Entity.from3DAsset(url: url) as? ModelEntity
 ```
 
 ### Format-specific loaders
