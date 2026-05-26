@@ -25,6 +25,7 @@ public extension Entity {
     /// Load a 3D model from a local file URL, dispatching to the appropriate loader by file extension.
     ///
     /// Supported formats:
+    /// - **USDZ, USD** — loaded via RealityKit's native loader
     /// - **STL, OBJ, PLY, ABC** — loaded via ModelIO (radcli14/ModelIO-to-RealityKit)
     /// - **DAE** (Collada) — loaded via a custom COLLADA parser (radcli14/DAE-to-RealityKit)
     /// - **GLB, GLTF** — loaded via GLTFKit2 (warrenm/GLTFKit2)
@@ -41,6 +42,8 @@ public extension Entity {
     @MainActor
     static func from3DAsset(url: URL) async throws -> Entity {
         switch url.pathExtension.lowercased() {
+        case "usdz", "usd", "usdc", "usda":
+            return try await Entity(contentsOf: url)
         case "stl", "obj", "ply", "abc":
             return try await ModelEntity.fromMDLAsset(url: url)
         case "dae":
@@ -79,6 +82,32 @@ public extension Entity {
             return try await Entity.fromGLTFAsset(data: data, format: format)
         default:
             throw RealityKitFormatsError.unsupportedFormat(format)
+        }
+    }
+
+    /// Write the entity's mesh data to a local file URL using the format-appropriate serializer.
+    ///
+    /// Supported formats:
+    /// - **STL, OBJ, PLY, ABC, USDZ** — written via ModelIO (radcli14/ModelIO-to-RealityKit)
+    /// - **DAE** (Collada) — written via COLLADA serializer (radcli14/DAE-to-RealityKit)
+    ///
+    /// Usage:
+    /// ```swift
+    /// try await entity.write3DAsset(to: url)
+    /// ```
+    ///
+    /// - Parameter url: The destination file URL. The file extension determines the format.
+    /// - Throws: `RealityKitFormatsError.unsupportedFormat` for unrecognised extensions,
+    ///   or a writer-specific error on failure.
+    @MainActor
+    func write3DAsset(to url: URL) async throws {
+        switch url.pathExtension.lowercased() {
+        case "stl", "obj", "ply", "abc", "usdz", "usd":
+            try await writeMDLAsset(to: url)
+        case "dae":
+            try await writeDAEAsset(to: url)
+        default:
+            throw RealityKitFormatsError.unsupportedFormat(url.pathExtension)
         }
     }
 }
