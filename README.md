@@ -24,7 +24,7 @@ Swift package providing RealityKit entity loaders for STL, OBJ, DAE, and GLB/GLT
 Add the package via Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/radcli14/RealityKitFormats", from: "0.1.0")
+.package(url: "https://github.com/radcli14/RealityKitFormats", from: "0.5.2")
 ```
 
 Then add `RealityKitFormats` to your target dependencies.
