@@ -7,6 +7,10 @@ import Foundation
 // Downloaded at test runtime; not committed to the repository.
 private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb")!
 
+// Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
+// Downloaded at test runtime; not committed to the repository.
+private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
+
 // MARK: - Helpers
 
 /// Download a file to a temporary path, returning the URL. Caller is responsible for cleanup.
@@ -138,6 +142,16 @@ private func loadBoxEntity() async throws -> Entity {
     return try await Entity.from3DAsset(data: data, format: "glb")
 }
 
+/// Downloads the Apple teapot USDZ to a temp file and loads it as an Entity.
+/// USDZ requires a file URL for loading (RealityKit has no data-based USDZ path),
+/// so a temp file is unavoidable. The file is removed once the entity is in memory.
+private func loadTeapotEntity() async throws -> Entity {
+    let tempURL = try await downloadToTemp(from: appleTeapotUSDZURL, extension: "usdz")
+    let entity = try await Entity.from3DAsset(url: tempURL)
+    try? FileManager.default.removeItem(at: tempURL)
+    return entity
+}
+
 // MARK: - Round-Trip Tests
 
 @Test @MainActor func testRoundTripGLB() async throws {
@@ -248,4 +262,113 @@ private func loadBoxEntity() async throws -> Entity {
     // STL has no material support — material spec will be nil.
     let mat = materialSpec(from: loaded)
     #expect(mat == nil, "STL format does not encode material data")
+}
+
+// MARK: - Apple USDZ Round-Trip Tests
+//
+// These tests load the official Apple AR Quick Look teapot USDZ and export it to
+// each of the alternate writable formats, then reload and verify that geometry
+// survived the round-trip. Exact vertex/index counts are not asserted because
+// different formats (and their loaders) may alter vertex sharing; instead we check
+// that the counts are positive and consistent with having received mesh data.
+
+@Test @MainActor func testAppleUSDZLoaderProducesEntity() async throws {
+    let entity = try await loadTeapotEntity()
+    let spec = meshSpec(from: entity)
+    #expect(spec != nil, "Teapot should contain at least one mesh")
+    #expect((spec?.vertexCount ?? 0) > 0, "Teapot mesh should have vertices")
+    #expect((spec?.indexCount ?? 0) > 0, "Teapot mesh should have triangle indices")
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToOBJ() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("obj")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "OBJ file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded OBJ should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToSTL() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("stl")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "STL file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded STL should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+
+    // STL encodes no material data.
+    #expect(materialSpec(from: loaded) == nil, "STL format does not encode material data")
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToPLY() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("ply")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "PLY file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded PLY should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToABC() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("abc")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "ABC file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded ABC should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToDAE() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "DAE file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded DAE should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
 }
