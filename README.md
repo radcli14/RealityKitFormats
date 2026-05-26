@@ -38,20 +38,22 @@ Then add `RealityKitFormats` to your target dependencies.
 ```swift
 import RealityKitFormats
 
-let entity = await Entity.from3DAsset(url: url)
+let entity = try await Entity.from3DAsset(url: url)
 ```
 
 `ModelEntity` is a subclass of `Entity`, so cast the result if you need it:
 
 ```swift
-let model = await Entity.from3DAsset(url: url) as? ModelEntity
+let model = try await Entity.from3DAsset(url: url) as? ModelEntity
 ```
 
 If the file is stored as `Data` (e.g. retrieved from SwiftData) rather than on disk, use the data overload and pass the format extension explicitly:
 
 ```swift
-let entity = await Entity.from3DAsset(data: data, format: "glb")
+let entity = try await Entity.from3DAsset(data: data, format: "glb")
 ```
+
+Both methods throw `RealityKitFormatsError.unsupportedFormat` for unrecognised extensions, or a loader-specific error if loading fails.
 
 ### Format-specific loaders
 
@@ -59,16 +61,16 @@ Each format also has its own static loader if you want to call it directly:
 
 ```swift
 // STL, OBJ, PLY, ABC
-let entity = await ModelEntity.fromMDLAsset(url: url)
+let entity = try await ModelEntity.fromMDLAsset(url: url)
 
 // DAE / COLLADA
-let entity = await ModelEntity.fromDAEAsset(url: url)
+let entity = try await ModelEntity.fromDAEAsset(url: url)
 
 // GLB / GLTF
-let entity = await Entity.fromGLTFAsset(url: url)
+let entity = try await Entity.fromGLTFAsset(url: url)
 ```
 
-All loaders are `async`, run on the `@MainActor`, and return `nil` on failure rather than throwing.
+All loaders are `async` and run on the `@MainActor`. They throw on failure rather than returning `nil`.
 
 ## Acknowledgements
 

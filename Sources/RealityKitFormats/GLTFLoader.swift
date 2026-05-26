@@ -16,36 +16,30 @@ public extension Entity {
     /// preserve the complete structure produced by GLTFKit2.
     ///
     /// ```swift
-    /// let entity = await Entity.fromGLTFAsset(url: url)
+    /// let entity = try await Entity.fromGLTFAsset(url: url)
     /// ```
+    ///
+    /// - Throws: Any error thrown by `GLTFRealityKitLoader`.
     @MainActor
-    static func fromGLTFAsset(url: URL) async -> Entity? {
-        do {
-            return try await GLTFRealityKitLoader.load(from: url)
-        } catch {
-            print("Entity.fromGLTFAsset(url:) failed: \(error.localizedDescription)")
-            return nil
-        }
+    static func fromGLTFAsset(url: URL) async throws -> Entity {
+        try await GLTFRealityKitLoader.load(from: url)
     }
 
     /// Load an Entity from GLTF or GLB data bytes.
+    ///
+    /// Writes the data to a temporary file, loads it, then cleans up.
+    ///
     /// - Parameters:
     ///   - data: The raw file data
     ///   - format: File format extension, either `"glb"` (default) or `"gltf"`
+    /// - Throws: Any file I/O error or error thrown by `GLTFRealityKitLoader`.
     @MainActor
-    static func fromGLTFAsset(data: Data, format: String = "glb") async -> Entity? {
+    static func fromGLTFAsset(data: Data, format: String = "glb") async throws -> Entity {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(format)
-        do {
-            try data.write(to: tempURL)
-            let entity = await Entity.fromGLTFAsset(url: tempURL)
-            try? FileManager.default.removeItem(at: tempURL)
-            return entity
-        } catch {
-            print("Entity.fromGLTFAsset(data:format:) failed: \(error.localizedDescription)")
-            try? FileManager.default.removeItem(at: tempURL)
-            return nil
-        }
+        try data.write(to: tempURL)
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+        return try await fromGLTFAsset(url: tempURL)
     }
 }

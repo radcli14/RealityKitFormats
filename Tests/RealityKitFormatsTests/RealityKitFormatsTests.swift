@@ -24,51 +24,53 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 
 // MARK: - GLB Loader Tests
 
-@Test func testGLBLoaderProducesEntity() async throws {
+@Test @MainActor func testGLBLoaderProducesEntity() async throws {
     let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
-    let entity = await Entity.fromGLTFAsset(url: tempURL)
-    #expect(entity != nil, "Entity.fromGLTFAsset should return a non-nil entity for Box.glb")
+    let entity = try await Entity.fromGLTFAsset(url: tempURL)
+    #expect(entity.children.count == 1)
 }
 
-@Test func testGLBLoaderFromData() async throws {
+@Test @MainActor func testGLBLoaderFromData() async throws {
     let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
         throw URLError(.badServerResponse)
     }
 
-    let entity = await Entity.fromGLTFAsset(data: data, format: "glb")
-    #expect(entity != nil, "Entity.fromGLTFAsset(data:format:) should return a non-nil entity for Box.glb data")
+    let entity = try await Entity.fromGLTFAsset(data: data, format: "glb")
+    #expect(entity.children.count == 1)
 }
 
 // MARK: - Unified Loader Tests
 
-@Test func testUnifiedLoaderDispatchesGLB() async throws {
+@Test @MainActor func testUnifiedLoaderDispatchesGLB() async throws {
     let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
-    let entity = await Entity.from3DAsset(url: tempURL)
-    #expect(entity != nil, "Entity.from3DAsset should dispatch GLB to the GLTF loader and return a non-nil entity")
+    let entity = try await Entity.from3DAsset(url: tempURL)
+    #expect(entity.children.count == 1)
 }
 
-@Test func testUnifiedLoaderDispatchesGLBFromData() async throws {
+@Test @MainActor func testUnifiedLoaderDispatchesGLBFromData() async throws {
     let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
     guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
         throw URLError(.badServerResponse)
     }
 
-    let entity = await Entity.from3DAsset(data: data, format: "glb")
-    #expect(entity != nil, "Entity.from3DAsset(data:format:) should dispatch GLB to the GLTF loader and return a non-nil entity")
+    let entity = try await Entity.from3DAsset(data: data, format: "glb")
+    #expect(entity.children.count == 1)
 }
 
-@Test func testUnifiedLoaderRejectsUnsupportedExtension() async {
+@Test func testUnifiedLoaderRejectsUnsupportedExtension() async throws {
     let fakeURL = URL(fileURLWithPath: "/tmp/model.xyz")
-    let entity = await Entity.from3DAsset(url: fakeURL)
-    #expect(entity == nil, "Entity.from3DAsset should return nil for an unsupported file extension")
+    await #expect(throws: RealityKitFormatsError.unsupportedFormat("xyz")) {
+        _ = try await Entity.from3DAsset(url: fakeURL)
+    }
 }
 
-@Test func testUnifiedLoaderDataRejectsUnsupportedFormat() async {
-    let entity = await Entity.from3DAsset(data: Data(), format: "xyz")
-    #expect(entity == nil, "Entity.from3DAsset(data:format:) should return nil for an unsupported format")
+@Test func testUnifiedLoaderDataRejectsUnsupportedFormat() async throws {
+    await #expect(throws: RealityKitFormatsError.unsupportedFormat("xyz")) {
+        _ = try await Entity.from3DAsset(data: Data(), format: "xyz")
+    }
 }

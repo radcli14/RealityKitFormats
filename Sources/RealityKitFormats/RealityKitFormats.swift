@@ -8,6 +8,19 @@ import RealityKit
 import ModelIO_to_RealityKit
 import DAE_to_RealityKit
 
+/// Errors thrown by the RealityKitFormats unified loaders.
+public enum RealityKitFormatsError: LocalizedError, Equatable {
+    /// The file extension or format string is not supported.
+    case unsupportedFormat(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsupportedFormat(let ext):
+            return "RealityKitFormats: unsupported 3D file format '\(ext)'"
+        }
+    }
+}
+
 public extension Entity {
     /// Load a 3D model from a local file URL, dispatching to the appropriate loader by file extension.
     ///
@@ -18,11 +31,27 @@ public extension Entity {
     ///
     /// Usage:
     /// ```swift
-    /// let entity = await Entity.from3DAsset(url: url)
+    /// let entity = try await Entity.from3DAsset(url: url)
     /// ```
     ///
     /// - Parameter url: A local file URL for the 3D model.
-    /// - Returns: An `Entity` on success, or `nil` if the format is unsupported or loading failed.
+    /// - Returns: The loaded `Entity`.
+    /// - Throws: `RealityKitFormatsError.unsupportedFormat` if the extension is not recognised,
+    ///   or a loader-specific error if loading fails.
+    @MainActor
+    static func from3DAsset(url: URL) async throws -> Entity {
+        switch url.pathExtension.lowercased() {
+        case "stl", "obj", "ply", "abc":
+            return try await ModelEntity.fromMDLAsset(url: url)
+        case "dae":
+            return try await ModelEntity.fromDAEAsset(url: url)
+        case "gltf", "glb":
+            return try await Entity.fromGLTFAsset(url: url)
+        default:
+            throw RealityKitFormatsError.unsupportedFormat(url.pathExtension)
+        }
+    }
+
     /// Load a 3D model from raw file data, dispatching to the appropriate loader by format extension.
     ///
     /// Useful when the file has been serialized as `Data` (e.g. stored in SwiftData) rather than
@@ -30,40 +59,26 @@ public extension Entity {
     ///
     /// Usage:
     /// ```swift
-    /// let entity = await Entity.from3DAsset(data: data, format: "glb")
+    /// let entity = try await Entity.from3DAsset(data: data, format: "glb")
     /// ```
     ///
     /// - Parameters:
     ///   - data: The raw file bytes.
     ///   - format: The file format extension (e.g. `"glb"`, `"stl"`, `"dae"`).
-    /// - Returns: An `Entity` on success, or `nil` if the format is unsupported or loading failed.
+    /// - Returns: The loaded `Entity`.
+    /// - Throws: `RealityKitFormatsError.unsupportedFormat` if the format is not recognised,
+    ///   or a loader-specific error if loading fails.
     @MainActor
-    static func from3DAsset(data: Data, format: String) async -> Entity? {
+    static func from3DAsset(data: Data, format: String) async throws -> Entity {
         switch format.lowercased() {
         case "stl", "obj", "ply", "abc":
-            return await ModelEntity.fromMDLAsset(data: data, format: format)
+            return try await ModelEntity.fromMDLAsset(data: data, format: format)
         case "dae":
-            return await ModelEntity.fromDAEAsset(data: data)
+            return try await ModelEntity.fromDAEAsset(data: data)
         case "gltf", "glb":
-            return await Entity.fromGLTFAsset(data: data, format: format)
+            return try await Entity.fromGLTFAsset(data: data, format: format)
         default:
-            print("RealityKitFormats: unsupported file extension '\(format)'")
-            return nil
-        }
-    }
-
-    @MainActor
-    static func from3DAsset(url: URL) async -> Entity? {
-        switch url.pathExtension.lowercased() {
-        case "stl", "obj", "ply", "abc":
-            return await ModelEntity.fromMDLAsset(url: url)
-        case "dae":
-            return await ModelEntity.fromDAEAsset(url: url)
-        case "gltf", "glb":
-            return await Entity.fromGLTFAsset(url: url)
-        default:
-            print("RealityKitFormats: unsupported file extension '\(url.pathExtension)'")
-            return nil
+            throw RealityKitFormatsError.unsupportedFormat(format)
         }
     }
 }
