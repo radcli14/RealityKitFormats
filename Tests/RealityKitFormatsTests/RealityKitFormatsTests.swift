@@ -78,7 +78,10 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 // MARK: - Round-Trip Helpers
 
 // Expected mesh specification for the Khronos Box GLB source model.
-private let sourceChildrenCount = 1
+// Hierarchy-preserving formats (GLB, USDZ, DAE) return root → Node1 → mesh, so children = 1.
+// Flat formats (OBJ, STL) return a single ModelEntity directly, so children = 0.
+private let sourceChildrenCountHierarchy = 1
+private let sourceChildrenCountFlat = 0
 private let sourceVertexCount = 24
 private let sourceIndexCount = 36
 
@@ -167,7 +170,7 @@ private func loadBoxEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
-    #expect(loaded.children.count == sourceChildrenCount)
+    #expect(loaded.children.count == sourceChildrenCountHierarchy)
 
     let mesh = meshSpec(from: loaded)
     #expect(mesh?.vertexCount == sourceVertexCount)
@@ -191,7 +194,8 @@ private func loadBoxEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
-    #expect(loaded.children.count == sourceChildrenCount)
+    // OBJ is a flat format — the loader returns a single ModelEntity with no children.
+    #expect(loaded.children.count == sourceChildrenCountFlat)
 
     let mesh = meshSpec(from: loaded)
     #expect(mesh?.vertexCount == sourceVertexCount)
@@ -215,7 +219,7 @@ private func loadBoxEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
-    #expect(loaded.children.count == sourceChildrenCount)
+    #expect(loaded.children.count == sourceChildrenCountHierarchy)
 
     let mesh = meshSpec(from: loaded)
     #expect(mesh?.vertexCount == sourceVertexCount)
@@ -239,7 +243,8 @@ private func loadBoxEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
-    #expect(loaded.children.count == sourceChildrenCount)
+    // STL is a flat format — the loader returns a single ModelEntity with no children.
+    #expect(loaded.children.count == sourceChildrenCountFlat)
 
     let mesh = meshSpec(from: loaded)
     #expect(mesh?.vertexCount == sourceVertexCount)
