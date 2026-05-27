@@ -11,6 +11,10 @@ private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/Kh
 // Downloaded at test runtime; not committed to the repository.
 private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
 
+// Khronos Damaged Helmet — a GLB with a single mesh and full image-based PBR materials
+// (base color, normal, metallic-roughness, emissive, occlusion). Downloaded at test runtime.
+private let khronosDamagedHelmetGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/refs/heads/main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb")!
+
 // MARK: - Asset Cache
 
 /// Downloads each remote test asset exactly once per process, regardless of how many tests
@@ -22,6 +26,7 @@ private actor AssetCache {
 
     private var glbTask: Task<Data, any Error>?
     private var usdzTask: Task<Data, any Error>?
+    private var helmetTask: Task<Data, any Error>?
 
     /// Returns the raw bytes of the Khronos Box GLB. Downloaded at most once per process.
     func glbData() async throws -> Data {
@@ -50,6 +55,20 @@ private actor AssetCache {
         }
         return try await usdzTask!.value
     }
+
+    /// Returns the raw bytes of the Khronos Damaged Helmet GLB. Downloaded at most once per process.
+    func helmetData() async throws -> Data {
+        if helmetTask == nil {
+            helmetTask = Task {
+                let (data, response) = try await URLSession.shared.data(from: khronosDamagedHelmetGLBURL)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+        }
+        return try await helmetTask!.value
+    }
 }
 
 /// Writes the cached GLB bytes to a fresh temp file. Caller is responsible for cleanup.
@@ -77,6 +96,21 @@ private func makeGLBTempURL() async throws -> URL {
     let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.fromGLTFAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
+}
+
+// MARK: - PBR Material Tests
+
+@Test @MainActor func testDamagedHelmetMaterialsLoaded() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let entity = try await Entity.from3DAsset(data: data, format: "glb")
+
+    let mesh = try #require(meshSpec(from: entity), "Helmet should contain geometry")
+    #expect(mesh.vertexCount > 0)
+    #expect(mesh.indexCount > 0)
+
+    let mat = try #require(materialSpec(from: entity), "Helmet should have a PhysicallyBasedMaterial")
+    #expect(mat.hasBaseColorTexture, "Helmet albedo texture should be loaded")
+    #expect(mat.hasNormalTexture, "Helmet normal map should be loaded")
 }
 
 // MARK: - Unified Loader Tests
@@ -138,6 +172,7 @@ private struct MeshSpec {
 /// Material statistics extracted from the first PhysicallyBasedMaterial found in an entity tree.
 private struct MaterialSpec {
     let roughnessScale: Float
+    let hasBaseColorTexture: Bool
     let hasNormalTexture: Bool
 }
 
@@ -171,6 +206,7 @@ private func materialSpec(from entity: Entity) -> MaterialSpec? {
           let pbr = comp.materials.first as? PhysicallyBasedMaterial else { return nil }
     return MaterialSpec(
         roughnessScale: pbr.roughness.scale,
+        hasBaseColorTexture: pbr.baseColor.texture != nil,
         hasNormalTexture: pbr.normal.texture != nil
     )
 }
