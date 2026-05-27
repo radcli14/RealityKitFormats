@@ -9,10 +9,18 @@ import SwiftUI
 import RealityKit
 import RealityKitFormats
 
+enum Format3D: String, CaseIterable {
+    case glb = "GLB"
+    case usdz = "USDZ"
+    case dae = "DAE"
+    case obj = "OBJ"
+    case stl = "STL"
+}
+
 struct ContentView: View {
 
-    @State private var urlString = khronosHelmetGLBURL
-    @State private var targetFormat = "GLB"
+    @State private var urlString: String = "\(khronosBaseGLBURL)/\(khronosGLBFiles[0])"
+    @State private var targetFormat: Format3D = .glb
     
     var body: some View {
         NavigationStack {
@@ -22,22 +30,39 @@ struct ContentView: View {
     
     // -MARK: URL Options
     
-    // Khronos Box sample — a minimal GLB with a single mesh and PBR material.
-    // Downloaded at test runtime; not committed to the repository.
-    private static let khronosBoxGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb"
+    /// Base path on which you can find several GLB sample files hosted by Khronos Group
+    private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary"
 
+    /// A list of files available on the Khronos Group path
+    private static let khronosGLBFiles = ["Box", "DamagedHelmet"]
     
-    private static let khronosHelmetGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/refs/heads/main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb"
+    /// The array of properly formatted URLs derived from the Khronos Group GLB files
+    private lazy var khronosGLBURLs: [URL] = {
+        Self.khronosGLBFiles.compactMap { file in
+            URL(string: "\(Self.khronosBaseGLBURL)/\(file).glb")
+        }
+    }()
+
+    /// Base path on which you can find several USDZ sample files from Apple
+    private static let appleBaseUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models"
     
+    /// A list of files available on the Apple USDZ path
+    private static let appleUSDZFiles = ["teapot", ]
+
     // Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
     // Downloaded at test runtime; not committed to the repository.
     private static let appleTeapotUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz"
 
+    private lazy var appleUSDZURLs: [URL] = {
+        Self.khronosGLBFiles.compactMap { file in
+            URL(string: "\(Self.appleBaseUSDZURL)/\(file)/\(file).usdz")
+        }
+    }()
 }
 
 struct RealityViewFromRemote: View {
     let urlString: String
-    let targetFormat: String
+    let targetFormat: Format3D
     
     @State private var url: URL!
     
@@ -64,7 +89,7 @@ struct RealityViewFromRemote: View {
         }
         .realityViewCameraControls(.orbit)
         .navigationTitle(url?.lastPathComponent ?? "")
-        .navigationSubtitle(targetFormat)
+        .navigationSubtitle(targetFormat.rawValue)
     }
 }
 
