@@ -11,25 +11,68 @@ private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/Kh
 // Downloaded at test runtime; not committed to the repository.
 private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
 
-// MARK: - Helpers
+// MARK: - Asset Cache
 
-/// Download a file to a temporary path, returning the URL. Caller is responsible for cleanup.
-private func downloadToTemp(from remoteURL: URL, extension ext: String) async throws -> URL {
-    let (data, response) = try await URLSession.shared.data(from: remoteURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
+/// Downloads each remote test asset exactly once per process, regardless of how many tests
+/// request it concurrently. Each asset is backed by a single `Task`; latecomers `await` the
+/// already-running task rather than starting a new download.
+private actor AssetCache {
+    static let shared = AssetCache()
+    private init() {}
+
+    private var glbTask: Task<Data, any Error>?
+    private var usdzTask: Task<URL, any Error>?
+
+    /// Returns the raw bytes of the Khronos Box GLB. Downloaded at most once per process.
+    func glbData() async throws -> Data {
+        if glbTask == nil {
+            glbTask = Task {
+                let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+        }
+        return try await glbTask!.value
     }
-    let tempURL = FileManager.default.temporaryDirectory
+
+    /// Returns a URL to a temp file containing the Apple teapot USDZ.
+    /// The file is written once and persists for the process lifetime (OS cleans it up).
+    /// USDZ requires a file URL for loading — there is no data-based RealityKit path.
+    func usdzTempURL() async throws -> URL {
+        if usdzTask == nil {
+            usdzTask = Task {
+                let (data, response) = try await URLSession.shared.data(from: appleTeapotUSDZURL)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                let url = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension("usdz")
+                try data.write(to: url)
+                return url
+            }
+        }
+        return try await usdzTask!.value
+    }
+}
+
+/// Writes the cached GLB bytes to a fresh temp file. Caller is responsible for cleanup.
+/// Use this when a test specifically needs a file URL (e.g. to exercise `fromGLTFAsset(url:)`).
+private func makeGLBTempURL() async throws -> URL {
+    let data = try await AssetCache.shared.glbData()
+    let url = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension(ext)
-    try data.write(to: tempURL)
-    return tempURL
+        .appendingPathExtension("glb")
+    try data.write(to: url)
+    return url
 }
 
 // MARK: - GLB Loader Tests
 
 @Test @MainActor func testGLBLoaderProducesEntity() async throws {
-    let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
+    let tempURL = try await makeGLBTempURL()
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
     let entity = try await Entity.fromGLTFAsset(url: tempURL)
@@ -37,11 +80,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 }
 
 @Test @MainActor func testGLBLoaderFromData() async throws {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
-
+    let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.fromGLTFAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
 }
@@ -49,7 +88,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 // MARK: - Unified Loader Tests
 
 @Test @MainActor func testUnifiedLoaderDispatchesGLB() async throws {
-    let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
+    let tempURL = try await makeGLBTempURL()
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
     let entity = try await Entity.from3DAsset(url: tempURL)
@@ -57,11 +96,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 }
 
 @Test @MainActor func testUnifiedLoaderDispatchesGLBFromData() async throws {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
-
+    let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.from3DAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
 }
@@ -133,23 +168,16 @@ private func materialSpec(from entity: Entity) -> MaterialSpec? {
     )
 }
 
-/// Loads the Khronos Box as a Data round-trip to avoid temp-file lifetime issues across async steps.
+/// Returns a Khronos Box entity loaded from the cached GLB bytes.
 private func loadBoxEntity() async throws -> Entity {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
+    let data = try await AssetCache.shared.glbData()
     return try await Entity.from3DAsset(data: data, format: "glb")
 }
 
-/// Downloads the Apple teapot USDZ to a temp file and loads it as an Entity.
-/// USDZ requires a file URL for loading (RealityKit has no data-based USDZ path),
-/// so a temp file is unavoidable. The file is removed once the entity is in memory.
+/// Returns an Apple teapot entity loaded from the cached USDZ temp file.
 private func loadTeapotEntity() async throws -> Entity {
-    let tempURL = try await downloadToTemp(from: appleTeapotUSDZURL, extension: "usdz")
-    let entity = try await Entity.from3DAsset(url: tempURL)
-    try? FileManager.default.removeItem(at: tempURL)
-    return entity
+    let url = try await AssetCache.shared.usdzTempURL()
+    return try await Entity.from3DAsset(url: url)
 }
 
 // MARK: - Round-Trip Tests
