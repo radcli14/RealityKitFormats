@@ -15,11 +15,16 @@ struct ContentView: View {
     // Downloaded at test runtime; not committed to the repository.
     private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb")!
 
+    
+    // Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
+    // Downloaded at test runtime; not committed to the repository.
+    private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
+
     var body: some View {
         VStack {
             realityView(url: khronosBoxGLBURL, targetFormat: "GLB")
+            realityView(url: appleTeapotUSDZURL, targetFormat: "USDZ")
         }
-        .realityViewCameraControls(.orbit)
     }
     
     func realityView(url: URL, targetFormat: String) -> some View {
@@ -30,11 +35,23 @@ struct ContentView: View {
             } catch {
                 print("Failed to load, \(error.localizedDescription)")
             }
+        } placeholder: {
+            VStack(spacing: 12) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(1.5)
+                
+                Text("Loading 3D Asset...")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .realityViewCameraControls(.orbit)
         .overlay(alignment: .top) {
             VStack {
-                Text(url.lastPathComponent).font(.caption)
-                Text(targetFormat).font(.headline)
+                Text(url.lastPathComponent)//.font(.caption)
+                //Text(targetFormat).font(.headline)
             }
         }
     }
