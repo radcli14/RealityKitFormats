@@ -16,21 +16,27 @@ struct ContentView: View {
     private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb")!
 
     var body: some View {
+        VStack {
+            realityView(url: khronosBoxGLBURL, targetFormat: "GLB")
+        }
+        .realityViewCameraControls(.orbit)
+    }
+    
+    func realityView(url: URL, targetFormat: String) -> some View {
         RealityView { content in
             do {
-                let entity = try await Entity.from3DAsset(url: khronosBoxGLBURL)
+                let entity = try await Entity.from3DAsset(url: url)
                 content.add(entity)
             } catch {
-                print("Failed to load GLTF, \(error.localizedDescription)")
+                print("Failed to load, \(error.localizedDescription)")
             }
         }
         .overlay(alignment: .top) {
             VStack {
-                Text("Box.glb").font(.caption)
-                Text("GLB").font(.headline)
+                Text(url.lastPathComponent).font(.caption)
+                Text(targetFormat).font(.headline)
             }
         }
-        .realityViewCameraControls(.orbit)
     }
 }
 
