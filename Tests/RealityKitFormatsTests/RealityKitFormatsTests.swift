@@ -7,25 +7,66 @@ import Foundation
 // Downloaded at test runtime; not committed to the repository.
 private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb")!
 
-// MARK: - Helpers
+// Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
+// Downloaded at test runtime; not committed to the repository.
+private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
 
-/// Download a file to a temporary path, returning the URL. Caller is responsible for cleanup.
-private func downloadToTemp(from remoteURL: URL, extension ext: String) async throws -> URL {
-    let (data, response) = try await URLSession.shared.data(from: remoteURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
+// MARK: - Asset Cache
+
+/// Downloads each remote test asset exactly once per process, regardless of how many tests
+/// request it concurrently. Each asset is backed by a single `Task`; latecomers `await` the
+/// already-running task rather than starting a new download.
+private actor AssetCache {
+    static let shared = AssetCache()
+    private init() {}
+
+    private var glbTask: Task<Data, any Error>?
+    private var usdzTask: Task<Data, any Error>?
+
+    /// Returns the raw bytes of the Khronos Box GLB. Downloaded at most once per process.
+    func glbData() async throws -> Data {
+        if glbTask == nil {
+            glbTask = Task {
+                let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+        }
+        return try await glbTask!.value
     }
-    let tempURL = FileManager.default.temporaryDirectory
+
+    /// Returns the raw bytes of the Apple teapot USDZ. Downloaded at most once per process.
+    func usdzData() async throws -> Data {
+        if usdzTask == nil {
+            usdzTask = Task {
+                let (data, response) = try await URLSession.shared.data(from: appleTeapotUSDZURL)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                return data
+            }
+        }
+        return try await usdzTask!.value
+    }
+}
+
+/// Writes the cached GLB bytes to a fresh temp file. Caller is responsible for cleanup.
+/// Use this when a test specifically needs a file URL (e.g. to exercise `fromGLTFAsset(url:)`).
+private func makeGLBTempURL() async throws -> URL {
+    let data = try await AssetCache.shared.glbData()
+    let url = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension(ext)
-    try data.write(to: tempURL)
-    return tempURL
+        .appendingPathExtension("glb")
+    try data.write(to: url)
+    return url
 }
 
 // MARK: - GLB Loader Tests
 
 @Test @MainActor func testGLBLoaderProducesEntity() async throws {
-    let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
+    let tempURL = try await makeGLBTempURL()
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
     let entity = try await Entity.fromGLTFAsset(url: tempURL)
@@ -33,11 +74,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 }
 
 @Test @MainActor func testGLBLoaderFromData() async throws {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
-
+    let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.fromGLTFAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
 }
@@ -45,7 +82,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 // MARK: - Unified Loader Tests
 
 @Test @MainActor func testUnifiedLoaderDispatchesGLB() async throws {
-    let tempURL = try await downloadToTemp(from: khronosBoxGLBURL, extension: "glb")
+    let tempURL = try await makeGLBTempURL()
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
     let entity = try await Entity.from3DAsset(url: tempURL)
@@ -53,11 +90,7 @@ private func downloadToTemp(from remoteURL: URL, extension ext: String) async th
 }
 
 @Test @MainActor func testUnifiedLoaderDispatchesGLBFromData() async throws {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
-
+    let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.from3DAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
 }
@@ -134,13 +167,16 @@ private func materialSpec(from entity: Entity) -> MaterialSpec? {
     )
 }
 
-/// Loads the Khronos Box as a Data round-trip to avoid temp-file lifetime issues across async steps.
+/// Returns a Khronos Box entity loaded from the cached GLB bytes.
 private func loadBoxEntity() async throws -> Entity {
-    let (data, response) = try await URLSession.shared.data(from: khronosBoxGLBURL)
-    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
+    let data = try await AssetCache.shared.glbData()
     return try await Entity.from3DAsset(data: data, format: "glb")
+}
+
+/// Returns an Apple teapot entity loaded from the cached USDZ bytes.
+private func loadTeapotEntity() async throws -> Entity {
+    let data = try await AssetCache.shared.usdzData()
+    return try await Entity.from3DAsset(data: data, format: "usdz")
 }
 
 // MARK: - Round-Trip Tests
@@ -257,4 +293,114 @@ private func loadBoxEntity() async throws -> Entity {
 
     // STL has no material encoding; ModelIO supplies a default PBR material on load.
     // We don't assert on material values here — they carry no round-trip meaning.
+}
+
+// MARK: - Apple USDZ Round-Trip Tests
+//
+// These tests load the official Apple AR Quick Look teapot USDZ and export it to
+// each of the alternate writable formats, then reload and verify that geometry
+// survived the round-trip. Exact vertex/index counts are not asserted because
+// different formats (and their loaders) may alter vertex sharing; instead we check
+// that the counts are positive and consistent with having received mesh data.
+
+@Test @MainActor func testAppleUSDZLoaderProducesEntity() async throws {
+    let entity = try await loadTeapotEntity()
+    let spec = meshSpec(from: entity)
+    #expect(spec != nil, "Teapot should contain at least one mesh")
+    #expect((spec?.vertexCount ?? 0) > 0, "Teapot mesh should have vertices")
+    #expect((spec?.indexCount ?? 0) > 0, "Teapot mesh should have triangle indices")
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToOBJ() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("obj")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "OBJ file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded OBJ should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToSTL() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("stl")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "STL file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded STL should contain geometry")
+    // STL creates one vertex per triangle corner (no sharing), so vertex count = index count.
+    #expect(mesh.vertexCount == sourceMesh.indexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+    // STL has no material encoding; ModelIO supplies a default PBR material on load.
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToPLY() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("ply")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "PLY file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded PLY should contain geometry")
+    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToABC() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("abc")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "ABC file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded ABC should contain geometry")
+    // ABC may introduce vertex duplication at attribute seams; triangle count is the invariant.
+    #expect(mesh.vertexCount >= sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
+}
+
+@Test @MainActor func testRoundTripAppleUSDZToDAE() async throws {
+    let source = try await loadTeapotEntity()
+    let sourceMesh = try #require(meshSpec(from: source), "Source teapot must have geometry")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "DAE file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded DAE should contain geometry")
+    // DAE may introduce vertex duplication at attribute seams; triangle count is the invariant.
+    #expect(mesh.vertexCount >= sourceMesh.vertexCount)
+    #expect(mesh.indexCount == sourceMesh.indexCount)
 }
