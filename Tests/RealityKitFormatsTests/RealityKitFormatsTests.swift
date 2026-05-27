@@ -113,6 +113,38 @@ private func makeGLBTempURL() async throws -> URL {
     #expect(mat.hasNormalTexture, "Helmet normal map should be loaded")
 }
 
+@Test @MainActor func testRoundTripDamagedHelmetToUSDZ() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let source = try await Entity.from3DAsset(data: data, format: "glb")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("usdz")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "USDZ file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+
+    let sourceMesh = try #require(meshSpec(from: source), "Source should have geometry")
+    let loadedMesh = try #require(meshSpec(from: loaded), "Reloaded USDZ should have geometry")
+    #expect(loadedMesh.vertexCount == sourceMesh.vertexCount)
+    #expect(loadedMesh.indexCount == sourceMesh.indexCount)
+
+    let sourceMat = try #require(materialSpec(from: source), "Source should have a PBR material")
+    let loadedMat = try #require(materialSpec(from: loaded), "Reloaded USDZ should have a PBR material")
+
+    // Image textures are currently lost during USDZ export: the writeMDLAsset path in
+    // ModelIO-to-RealityKit does not embed TextureResource data into the USDZ archive.
+    withKnownIssue("USDZ export does not yet preserve image textures") {
+        #expect(loadedMat.hasBaseColorTexture == sourceMat.hasBaseColorTexture,
+                "Base color texture assignment should survive USDZ round-trip")
+        #expect(loadedMat.hasNormalTexture == sourceMat.hasNormalTexture,
+                "Normal map assignment should survive USDZ round-trip")
+    }
+}
+
 // MARK: - Unified Loader Tests
 
 @Test @MainActor func testUnifiedLoaderDispatchesGLB() async throws {

@@ -33,8 +33,8 @@ struct ContentView: View {
                     ToolbarItemGroup {
                         Menu {
                             Picker("Select Model", selection: $url) {
-                                ForEach(Self.khronosGLBURLs + Self.appleUSDZURLs, id: \.self) { khronosURL in
-                                    Text(khronosURL.lastPathComponent).tag(khronosURL)
+                                ForEach(Self.allURLs, id: \.self) { assetURL in
+                                    Text(assetURL.lastPathComponent).tag(assetURL)
                                 }
                             }
                         } label: {
@@ -48,11 +48,13 @@ struct ContentView: View {
     
     // -MARK: URL Options
     
+    private static let allURLs: [URL] = khronosGLBURLs + appleUSDZURLs + khronosDAEURLs
+    
     /// Base path on which you can find several GLB sample files hosted by Khronos Group
     private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/"
 
     /// A list of files available on the Khronos Group path
-    private static let khronosGLBFiles = ["DamagedHelmet", "ToyCar", "ABeautifulGame"]
+    private static let khronosGLBFiles = ["DamagedHelmet", "ToyCar", "ABeautifulGame", "ChronographWatch", "CarConcept"]
     
     /// The array of properly formatted URLs derived from the Khronos Group GLB files
     private static let khronosGLBURLs: [URL] = Self.khronosGLBFiles.compactMap { file in
@@ -68,6 +70,16 @@ struct ContentView: View {
     /// The array of properly formatted URLs derived from the Khronos Group GLB files
     private static let appleUSDZURLs: [URL] = Self.appleUSDZFiles.compactMap { file in
         URL(string: "\(Self.appleBaseUSDZURL)/\(file)/\(file).usdz")
+    }
+    
+    private static let khronosBaseDAEURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels"
+
+    // https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/GearboxAssy/GearboxAssy.dae
+    
+    private static let khronosDAEFiles = ["GearboxAssy", "Duck"]
+
+    private static let khronosDAEURLs: [URL] = Self.khronosDAEFiles.compactMap { file in
+        URL(string: "\(Self.khronosBaseDAEURL)/\(file)/\(file).dae")
     }
 }
 
