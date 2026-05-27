@@ -11,25 +11,40 @@ import RealityKitFormats
 
 struct ContentView: View {
 
-    // Khronos Box sample — a minimal GLB with a single mesh and PBR material.
-    // Downloaded at test runtime; not committed to the repository.
-    private let khronosBoxGLBURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb")!
-
+    @State private var urlString = khronosHelmetGLBURL
+    @State private var targetFormat = "GLB"
     
-    // Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
-    // Downloaded at test runtime; not committed to the repository.
-    private let appleTeapotUSDZURL = URL(string: "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz")!
-
     var body: some View {
-        VStack {
-            realityView(url: khronosBoxGLBURL, targetFormat: "GLB")
-            realityView(url: appleTeapotUSDZURL, targetFormat: "USDZ")
+        NavigationStack {
+            RealityViewFromRemote(urlString: urlString, targetFormat: targetFormat)
         }
     }
     
-    func realityView(url: URL, targetFormat: String) -> some View {
+    // -MARK: URL Options
+    
+    // Khronos Box sample — a minimal GLB with a single mesh and PBR material.
+    // Downloaded at test runtime; not committed to the repository.
+    private static let khronosBoxGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary/Box.glb"
+
+    
+    private static let khronosHelmetGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/refs/heads/main/Models/DamagedHelmet/glTF-Binary/DamagedHelmet.glb"
+    
+    // Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
+    // Downloaded at test runtime; not committed to the repository.
+    private static let appleTeapotUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz"
+
+}
+
+struct RealityViewFromRemote: View {
+    let urlString: String
+    let targetFormat: String
+    
+    @State private var url: URL!
+    
+    var body: some View {
         RealityView { content in
             do {
+                url = URL(string: urlString)
                 let entity = try await Entity.from3DAsset(url: url)
                 content.add(entity)
             } catch {
@@ -48,12 +63,8 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .realityViewCameraControls(.orbit)
-        .overlay(alignment: .top) {
-            VStack {
-                Text(url.lastPathComponent)//.font(.caption)
-                //Text(targetFormat).font(.headline)
-            }
-        }
+        .navigationTitle(url?.lastPathComponent ?? "")
+        .navigationSubtitle(targetFormat)
     }
 }
 
