@@ -343,11 +343,10 @@ private func loadTeapotEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded STL should contain geometry")
-    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    // STL creates one vertex per triangle corner (no sharing), so vertex count = index count.
+    #expect(mesh.vertexCount == sourceMesh.indexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
-
-    // STL encodes no material data.
-    #expect(materialSpec(from: loaded) == nil, "STL format does not encode material data")
+    // STL has no material encoding; ModelIO supplies a default PBR material on load.
 }
 
 @Test @MainActor func testRoundTripAppleUSDZToPLY() async throws {
@@ -382,7 +381,8 @@ private func loadTeapotEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded ABC should contain geometry")
-    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    // ABC may introduce vertex duplication at attribute seams; triangle count is the invariant.
+    #expect(mesh.vertexCount >= sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
 }
 
@@ -400,6 +400,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded DAE should contain geometry")
-    #expect(mesh.vertexCount == sourceMesh.vertexCount)
+    // DAE may introduce vertex duplication at attribute seams; triangle count is the invariant.
+    #expect(mesh.vertexCount >= sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
 }
