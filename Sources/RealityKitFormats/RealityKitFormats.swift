@@ -77,9 +77,9 @@ public extension Entity {
     static func from3DAsset(data: Data, format: String) async throws -> Entity {
         switch format.lowercased() {
         case "usdz", "usd", "usdc", "usda":
-            // Entity(from:) was added in iOS 26 / macOS 26 / visionOS 26 (WWDC25 session 287).
+            // Entity(from:) was added in iOS/macOS/visionOS/tvOS 26 (WWDC25 session 287).
             // On older OS versions, write to a temp file and load via the URL-based path.
-            if #available(iOS 26, macOS 26, visionOS 26, *) {
+            if #available(iOS 26, macOS 26, visionOS 26, tvOS 26, *) {
                 return try await Entity(from: data)
             } else {
                 let ext = format.lowercased()
