@@ -19,29 +19,45 @@ enum Format3D: String, CaseIterable {
 
 struct ContentView: View {
 
-    @State private var urlString: String = "\(khronosBaseGLBURL)/\(khronosGLBFiles[0])"
+    @State private var url = Self.khronosGLBURLs.first!
     @State private var targetFormat: Format3D = .glb
+    
+    @State private var showFilePicker = false
+    @State private var showFormatPicker = false
     
     var body: some View {
         NavigationStack {
-            RealityViewFromRemote(urlString: urlString, targetFormat: targetFormat)
+            RealityViewFromRemote(url: url, targetFormat: targetFormat)
+                .id(url)
+                .toolbar {
+                    ToolbarItemGroup {
+                        Menu {
+                            Picker("Select Model", selection: $url) {
+                                ForEach(Self.khronosGLBURLs + Self.appleUSDZURLs, id: \.self) { khronosURL in
+                                    Text(khronosURL.lastPathComponent).tag(khronosURL)
+                                }
+                            }
+                        } label: {
+                            Label("Select Model", systemImage: "cube.transparent")
+                        }
+                    }
+                }
         }
+
     }
     
     // -MARK: URL Options
     
     /// Base path on which you can find several GLB sample files hosted by Khronos Group
-    private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Box/glTF-Binary"
+    private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/"
 
     /// A list of files available on the Khronos Group path
-    private static let khronosGLBFiles = ["Box", "DamagedHelmet"]
+    private static let khronosGLBFiles = ["DamagedHelmet", "ToyCar", "ABeautifulGame"]
     
     /// The array of properly formatted URLs derived from the Khronos Group GLB files
-    private lazy var khronosGLBURLs: [URL] = {
-        Self.khronosGLBFiles.compactMap { file in
-            URL(string: "\(Self.khronosBaseGLBURL)/\(file).glb")
-        }
-    }()
+    private static let khronosGLBURLs: [URL] = Self.khronosGLBFiles.compactMap { file in
+        URL(string: "\(Self.khronosBaseGLBURL)/\(file)/glTF-Binary/\(file).glb")
+    }
 
     /// Base path on which you can find several USDZ sample files from Apple
     private static let appleBaseUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models"
@@ -49,31 +65,41 @@ struct ContentView: View {
     /// A list of files available on the Apple USDZ path
     private static let appleUSDZFiles = ["teapot", ]
 
-    // Apple AR Quick Look teapot — an official Apple USDZ sample with simple geometry and no skeleton.
-    // Downloaded at test runtime; not committed to the repository.
-    private static let appleTeapotUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models/teapot/teapot.usdz"
-
-    private lazy var appleUSDZURLs: [URL] = {
-        Self.khronosGLBFiles.compactMap { file in
-            URL(string: "\(Self.appleBaseUSDZURL)/\(file)/\(file).usdz")
-        }
-    }()
+    /// The array of properly formatted URLs derived from the Khronos Group GLB files
+    private static let appleUSDZURLs: [URL] = Self.appleUSDZFiles.compactMap { file in
+        URL(string: "\(Self.appleBaseUSDZURL)/\(file)/\(file).usdz")
+    }
 }
 
 struct RealityViewFromRemote: View {
-    let urlString: String
+    let url: URL
     let targetFormat: Format3D
     
-    @State private var url: URL!
+    @State private var camera = PerspectiveCamera()
+    @State private var error: (any Error)?
     
     var body: some View {
         RealityView { content in
             do {
-                url = URL(string: urlString)
                 let entity = try await Entity.from3DAsset(url: url)
+            
+                // Sanitize the entire assembly tree, preserving all sub-parts
+                entity.sanitizeCameraComponents()
+                
+                // Re-center the assembly, and add it to the content
+                let bounds = entity.visualBounds(relativeTo: nil)
+                entity.position = -bounds.center
+                
+                // Position the camera dynamically based on the full assembly size
+                camera.position = 1.57 * bounds.extents
+                camera.look(at: .zero, from: bounds.extents, relativeTo: nil)
+                
+                // Add the assembly and camera to the content
                 content.add(entity)
+                content.add(camera)
             } catch {
-                print("Failed to load, \(error.localizedDescription)")
+                self.error = error
+                print("Failed to load \(url), \(error.localizedDescription)")
             }
         } placeholder: {
             VStack(spacing: 12) {
@@ -87,9 +113,30 @@ struct RealityViewFromRemote: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .overlay {
+            if let error {
+                ContentUnavailableView("An Error Occurred", systemImage: "exclamationmark.3", description: Text(error.localizedDescription))
+            }
+        }
         .realityViewCameraControls(.orbit)
-        .navigationTitle(url?.lastPathComponent ?? "")
-        .navigationSubtitle(targetFormat.rawValue)
+        .navigationTitle(url.lastPathComponent)
+        //.navigationSubtitle(targetFormat.rawValue)
+        .edgesIgnoringSafeArea(.all)
+    }
+}
+
+extension Entity {
+    
+    /// The ToyCar.glb model and others have camera components that block orbit camera gestures, this removes them recursively.
+    func sanitizeCameraComponents() {
+        // Strip the blocking camera components
+        if self.components.has(PerspectiveCameraComponent.self) {
+            self.components.remove(PerspectiveCameraComponent.self)
+        }
+        // Recursively subtract from all children down the assembly tree
+        for child in children {
+            child.sanitizeCameraComponents()
+        }
     }
 }
 
