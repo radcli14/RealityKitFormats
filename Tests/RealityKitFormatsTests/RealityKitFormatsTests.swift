@@ -95,6 +95,14 @@ private func makeGLBTempURL() async throws -> URL {
     #expect(entity.children.count == 1)
 }
 
+@Test @MainActor func testUnifiedLoaderDispatchesUSDZ() async throws {
+    let entity = try await Entity.from3DAsset(url: appleTeapotUSDZURL)
+    let spec = meshSpec(from: entity)
+    #expect(spec != nil, "Loaded USDZ should contain at least one mesh")
+    #expect((spec?.vertexCount ?? 0) > 0)
+    #expect((spec?.indexCount ?? 0) > 0)
+}
+
 @Test func testUnifiedLoaderRejectsUnsupportedExtension() async throws {
     let fakeURL = URL(fileURLWithPath: "/tmp/model.xyz")
     await #expect(throws: RealityKitFormatsError.unsupportedFormat("xyz")) {

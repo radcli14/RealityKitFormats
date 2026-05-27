@@ -22,7 +22,10 @@ public enum RealityKitFormatsError: LocalizedError, Equatable {
 }
 
 public extension Entity {
-    /// Load a 3D model from a local file URL, dispatching to the appropriate loader by file extension.
+    /// Load a 3D model from a file URL, dispatching to the appropriate loader by file extension.
+    ///
+    /// Both local `file://` URLs and remote `http(s)://` URLs are accepted. Remote URLs are
+    /// downloaded to a temporary file automatically; the caller does not need to handle that.
     ///
     /// Supported formats:
     /// - **USDZ, USD** — loaded via RealityKit's native loader
@@ -35,12 +38,26 @@ public extension Entity {
     /// let entity = try await Entity.from3DAsset(url: url)
     /// ```
     ///
-    /// - Parameter url: A local file URL for the 3D model.
+    /// - Parameter url: A local or remote URL for the 3D model.
     /// - Returns: The loaded `Entity`.
     /// - Throws: `RealityKitFormatsError.unsupportedFormat` if the extension is not recognised,
     ///   or a loader-specific error if loading fails.
     @MainActor
     static func from3DAsset(url: URL) async throws -> Entity {
+        // Transparently download remote URLs to a local temp file before dispatching.
+        if url.scheme == "http" || url.scheme == "https" {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(url.pathExtension)
+            try data.write(to: tempURL)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            return try await from3DAsset(url: tempURL)
+        }
+
         switch url.pathExtension.lowercased() {
         case "usdz", "usd", "usdc", "usda":
             return try await Entity(contentsOf: url)
