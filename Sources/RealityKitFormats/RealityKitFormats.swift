@@ -67,13 +67,29 @@ public extension Entity {
     ///
     /// - Parameters:
     ///   - data: The raw file bytes.
-    ///   - format: The file format extension (e.g. `"glb"`, `"stl"`, `"dae"`).
+    ///   - format: The file format extension (e.g. `"usdz"`, `"glb"`, `"stl"`, `"dae"`).
     /// - Returns: The loaded `Entity`.
     /// - Throws: `RealityKitFormatsError.unsupportedFormat` if the format is not recognised,
     ///   or a loader-specific error if loading fails.
+    /// - Note: USDZ/USD loading from `Data` uses `Entity(from:)` on iOS 26+ / macOS 26+.
+    ///   On earlier OS versions it falls back to writing a temporary file.
     @MainActor
     static func from3DAsset(data: Data, format: String) async throws -> Entity {
         switch format.lowercased() {
+        case "usdz", "usd", "usdc", "usda":
+            // Entity(from:) was added in iOS 26 / macOS 26 / visionOS 26 (WWDC25 session 287).
+            // On older OS versions, write to a temp file and load via the URL-based path.
+            if #available(iOS 26, macOS 26, visionOS 26, *) {
+                return try await Entity(from: data)
+            } else {
+                let ext = format.lowercased()
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(ext)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                try data.write(to: tempURL)
+                return try await Entity(contentsOf: tempURL)
+            }
         case "stl", "obj", "ply", "abc":
             return try await ModelEntity.fromMDLAsset(data: data, format: format)
         case "dae":

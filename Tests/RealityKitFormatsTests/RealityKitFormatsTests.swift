@@ -21,7 +21,7 @@ private actor AssetCache {
     private init() {}
 
     private var glbTask: Task<Data, any Error>?
-    private var usdzTask: Task<URL, any Error>?
+    private var usdzTask: Task<Data, any Error>?
 
     /// Returns the raw bytes of the Khronos Box GLB. Downloaded at most once per process.
     func glbData() async throws -> Data {
@@ -37,21 +37,15 @@ private actor AssetCache {
         return try await glbTask!.value
     }
 
-    /// Returns a URL to a temp file containing the Apple teapot USDZ.
-    /// The file is written once and persists for the process lifetime (OS cleans it up).
-    /// USDZ requires a file URL for loading — there is no data-based RealityKit path.
-    func usdzTempURL() async throws -> URL {
+    /// Returns the raw bytes of the Apple teapot USDZ. Downloaded at most once per process.
+    func usdzData() async throws -> Data {
         if usdzTask == nil {
             usdzTask = Task {
                 let (data, response) = try await URLSession.shared.data(from: appleTeapotUSDZURL)
                 guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                     throw URLError(.badServerResponse)
                 }
-                let url = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(UUID().uuidString)
-                    .appendingPathExtension("usdz")
-                try data.write(to: url)
-                return url
+                return data
             }
         }
         return try await usdzTask!.value
@@ -174,10 +168,10 @@ private func loadBoxEntity() async throws -> Entity {
     return try await Entity.from3DAsset(data: data, format: "glb")
 }
 
-/// Returns an Apple teapot entity loaded from the cached USDZ temp file.
+/// Returns an Apple teapot entity loaded from the cached USDZ bytes.
 private func loadTeapotEntity() async throws -> Entity {
-    let url = try await AssetCache.shared.usdzTempURL()
-    return try await Entity.from3DAsset(url: url)
+    let data = try await AssetCache.shared.usdzData()
+    return try await Entity.from3DAsset(data: data, format: "usdz")
 }
 
 // MARK: - Round-Trip Tests
