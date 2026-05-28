@@ -44,18 +44,35 @@ public extension Entity {
     ///   or a loader-specific error if loading fails.
     @MainActor
     static func from3DAsset(url: URL) async throws -> Entity {
-        // Transparently download remote URLs to a local temp file before dispatching.
+        // Format-aware remote URL dispatch: formats whose loaders resolve external assets
+        // from the remote base URL are passed through directly; self-contained or
+        // geometry-only formats are downloaded to a single temp file first.
         if url.scheme == "http" || url.scheme == "https" {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                throw URLError(.badServerResponse)
+            switch url.pathExtension.lowercased() {
+            case "dae":
+                // DAE-to-RealityKit resolves texture refs relative to the remote base URL.
+                return try await ModelEntity.fromDAEAsset(url: url)
+            case "gltf":
+                // GLTFKit2 receives the remote URL directly.
+                return try await Entity.fromGLTFAsset(url: url)
+            case "obj":
+                // OBJ references external .mtl and textures — download the full dependency
+                // tree into a temp directory so MDLAsset can resolve relative paths.
+                return try await fromRemoteOBJAsset(url: url)
+            default:
+                // Self-contained archives (USDZ, GLB) and geometry-only formats (STL, PLY, ABC):
+                // a single temp file is sufficient.
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                    .appendingPathExtension(url.pathExtension)
+                try data.write(to: tempURL)
+                defer { try? FileManager.default.removeItem(at: tempURL) }
+                return try await from3DAsset(url: tempURL)
             }
-            let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(url.pathExtension)
-            try data.write(to: tempURL)
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-            return try await from3DAsset(url: tempURL)
         }
 
         switch url.pathExtension.lowercased() {
@@ -116,6 +133,75 @@ public extension Entity {
         default:
             throw RealityKitFormatsError.unsupportedFormat(format)
         }
+    }
+
+    /// Download a remote OBJ file along with its MTL sidecars and all referenced textures
+    /// into a single temp directory, then load via MDLAsset so relative paths resolve correctly.
+    @MainActor
+    private static func fromRemoteOBJAsset(url: URL) async throws -> Entity {
+        let baseURL = url.deletingLastPathComponent()
+
+        let (objData, objResponse) = try await URLSession.shared.data(from: url)
+        guard let objHTTP = objResponse as? HTTPURLResponse, objHTTP.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let tempOBJURL = tempDir.appendingPathComponent(url.lastPathComponent)
+        try objData.write(to: tempOBJURL)
+
+        // Parse OBJ for mtllib directives.
+        let mtlNames: [String]
+        if let objText = String(data: objData, encoding: .utf8) {
+            mtlNames = objText.components(separatedBy: .newlines)
+                .compactMap { line -> String? in
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard trimmed.lowercased().hasPrefix("mtllib ") else { return nil }
+                    return String(trimmed.dropFirst("mtllib ".count))
+                        .trimmingCharacters(in: .whitespaces)
+                }
+                .filter { !$0.isEmpty }
+        } else {
+            mtlNames = []
+        }
+
+        // Download each MTL and its referenced textures.
+        let textureDirectives = ["map_kd", "map_ks", "map_ka", "map_ns", "map_d",
+                                 "map_bump", "bump", "disp", "decal", "refl"]
+        for mtlName in mtlNames {
+            let mtlRemoteURL = baseURL.appendingPathComponent(mtlName)
+            guard let (mtlData, mtlResp) = try? await URLSession.shared.data(from: mtlRemoteURL),
+                  (mtlResp as? HTTPURLResponse)?.statusCode == 200 else { continue }
+
+            let mtlLocalURL = tempDir.appendingPathComponent(
+                (mtlName as NSString).lastPathComponent)
+            try? mtlData.write(to: mtlLocalURL)
+
+            guard let mtlText = String(data: mtlData, encoding: .utf8) else { continue }
+            for line in mtlText.components(separatedBy: .newlines) {
+                let parts = line.trimmingCharacters(in: .whitespaces)
+                    .components(separatedBy: .whitespaces)
+                guard parts.count >= 2,
+                      textureDirectives.contains(parts[0].lowercased()),
+                      let texRelPath = parts.last, !texRelPath.isEmpty else { continue }
+
+                let texRemoteURL = baseURL.appendingPathComponent(texRelPath)
+                guard let (texData, texResp) = try? await URLSession.shared.data(from: texRemoteURL),
+                      (texResp as? HTTPURLResponse)?.statusCode == 200 else { continue }
+
+                let texLocalURL = tempDir.appendingPathComponent(texRelPath)
+                try? FileManager.default.createDirectory(
+                    at: texLocalURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true)
+                try? texData.write(to: texLocalURL)
+            }
+        }
+
+        return try await ModelEntity.fromMDLAsset(url: tempOBJURL)
     }
 
     /// Write the entity's mesh data to a local file URL using the format-appropriate serializer.
