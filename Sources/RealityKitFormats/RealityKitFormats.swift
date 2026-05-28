@@ -154,25 +154,8 @@ public extension Entity {
         let tempOBJURL = tempDir.appendingPathComponent(url.lastPathComponent)
         try objData.write(to: tempOBJURL)
 
-        // Parse OBJ for mtllib directives.
-        let mtlNames: [String]
-        if let objText = String(data: objData, encoding: .utf8) {
-            mtlNames = objText.components(separatedBy: .newlines)
-                .compactMap { line -> String? in
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    guard trimmed.lowercased().hasPrefix("mtllib ") else { return nil }
-                    return String(trimmed.dropFirst("mtllib ".count))
-                        .trimmingCharacters(in: .whitespaces)
-                }
-                .filter { !$0.isEmpty }
-        } else {
-            mtlNames = []
-        }
-
-        // Download each MTL and its referenced textures.
-        let textureDirectives = ["map_kd", "map_ks", "map_ka", "map_ns", "map_d",
-                                 "map_bump", "bump", "disp", "decal", "refl"]
-        for mtlName in mtlNames {
+        let objText = String(data: objData, encoding: .utf8) ?? ""
+        for mtlName in parseMTLNamesFromOBJ(objText) {
             let mtlRemoteURL = baseURL.appendingPathComponent(mtlName)
             guard let (mtlData, mtlResp) = try? await URLSession.shared.data(from: mtlRemoteURL),
                   (mtlResp as? HTTPURLResponse)?.statusCode == 200 else { continue }
@@ -182,13 +165,7 @@ public extension Entity {
             try? mtlData.write(to: mtlLocalURL)
 
             guard let mtlText = String(data: mtlData, encoding: .utf8) else { continue }
-            for line in mtlText.components(separatedBy: .newlines) {
-                let parts = line.trimmingCharacters(in: .whitespaces)
-                    .components(separatedBy: .whitespaces)
-                guard parts.count >= 2,
-                      textureDirectives.contains(parts[0].lowercased()),
-                      let texRelPath = parts.last, !texRelPath.isEmpty else { continue }
-
+            for texRelPath in parseTexturePathsFromMTL(mtlText) {
                 let texRemoteURL = baseURL.appendingPathComponent(texRelPath)
                 guard let (texData, texResp) = try? await URLSession.shared.data(from: texRemoteURL),
                       (texResp as? HTTPURLResponse)?.statusCode == 200 else { continue }
@@ -202,6 +179,32 @@ public extension Entity {
         }
 
         return try await ModelEntity.fromMDLAsset(url: tempOBJURL)
+    }
+
+    /// Extracts `mtllib` filenames from OBJ text. Used by both the remote loader and the archiver.
+    static func parseMTLNamesFromOBJ(_ text: String) -> [String] {
+        text.components(separatedBy: .newlines)
+            .compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.lowercased().hasPrefix("mtllib ") else { return nil }
+                return String(trimmed.dropFirst("mtllib ".count))
+                    .trimmingCharacters(in: .whitespaces)
+            }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Extracts texture relative paths from MTL text. Used by both the remote loader and the archiver.
+    static func parseTexturePathsFromMTL(_ text: String) -> [String] {
+        let directives = ["map_kd", "map_ks", "map_ka", "map_ns", "map_d",
+                          "map_bump", "bump", "disp", "decal", "refl"]
+        return text.components(separatedBy: .newlines).compactMap { line -> String? in
+            let parts = line.trimmingCharacters(in: .whitespaces)
+                .components(separatedBy: .whitespaces)
+            guard parts.count >= 2,
+                  directives.contains(parts[0].lowercased()),
+                  let path = parts.last, !path.isEmpty else { return nil }
+            return path
+        }
     }
 
     /// Write the entity's mesh data to a local file URL using the format-appropriate serializer.

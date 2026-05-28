@@ -86,6 +86,45 @@ Supported output formats:
 | `.stl` `.obj` `.ply` `.abc` `.usdz` `.usd` | ModelIO |
 | `.dae` | COLLADA serializer |
 
+### Serializing to SwiftData (RealityKit Asset Archive)
+
+Formats like OBJ and DAE reference external files (MTL sidecars, texture images) that are lost if you serialize only the main file bytes. `archiveAsset(url:)` solves this by bundling the model and all its dependencies into a single self-contained ZIP archive called a **RealityKit Asset Archive** (`.rka`).
+
+```swift
+// Serialize — produces a Data blob containing the model + all dependencies
+let archive: Data = try await Entity.archiveAsset(url: localModelURL)
+
+// Store in SwiftData
+@Model class RobotModel {
+    var name: String
+    @Attribute(.externalStorage) var archiveData: Data
+}
+
+// Load back — extracts to a temp directory and dispatches to the right loader
+let entity = try await Entity.from3DAsset(archive: archiveData)
+```
+
+The archive is a standard ZIP (STORED, no compression) containing a `manifest.json` entry that records the format, entry-point filename, and dependency list. Self-contained formats (USDZ, GLB, STL, PLY, ABC) produce a two-entry archive (manifest + single file). Dependency-bearing formats (OBJ, DAE, GLTF text) include all discovered sidecars with their relative directory layout preserved, so the original files are byte-for-byte recoverable.
+
+To distinguish an RKA archive from a plain USDZ blob when both are stored as `Data`:
+
+```swift
+if isRKAArchive(data) {
+    let entity = try await Entity.from3DAsset(archive: data)
+} else {
+    let entity = try await Entity.from3DAsset(data: data, format: "usdz")
+}
+```
+
+You can also inspect the manifest directly:
+
+```swift
+let manifest = try rkaManifest(from: archiveData)
+print(manifest.format)     // e.g. "obj"
+print(manifest.entryPoint) // e.g. "model.obj"
+print(manifest.files)      // ["manifest.json", "model.obj", "model.mtl", "textures/diffuse.png"]
+```
+
 ### Format-specific loaders
 
 Each format also exposes its own static loader if you want to call it directly:

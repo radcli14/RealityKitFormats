@@ -476,3 +476,94 @@ private func loadTeapotEntity() async throws -> Entity {
     #expect(mesh.vertexCount >= sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
 }
+
+// MARK: - RealityKit Asset Archive Tests
+
+/// Writes GLB bytes to a temp file and returns the URL. Caller must clean up.
+private func makeGLBTempURLForArchive() async throws -> URL {
+    let data = try await AssetCache.shared.glbData()
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("glb")
+    try data.write(to: url)
+    return url
+}
+
+@Test @MainActor func testArchiveRoundTripGLB() async throws {
+    let glbURL = try await makeGLBTempURLForArchive()
+    defer { try? FileManager.default.removeItem(at: glbURL) }
+
+    let archive = try await Entity.archiveAsset(url: glbURL)
+    #expect(!archive.isEmpty, "Archive data should not be empty")
+
+    let loaded = try await Entity.from3DAsset(archive: archive)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded entity should contain geometry")
+    #expect(mesh.vertexCount == sourceVertexCount)
+    #expect(mesh.indexCount == sourceIndexCount)
+}
+
+@Test @MainActor func testArchiveManifestContents() async throws {
+    let glbURL = try await makeGLBTempURLForArchive()
+    defer { try? FileManager.default.removeItem(at: glbURL) }
+
+    let archive = try await Entity.archiveAsset(url: glbURL)
+    let manifest = try rkaManifest(from: archive)
+
+    #expect(manifest.version == 1)
+    #expect(manifest.format == "glb")
+    #expect(manifest.entryPoint == glbURL.lastPathComponent)
+    // GLB is self-contained — archive contains manifest.json + the GLB file only.
+    #expect(manifest.files.count == 2)
+    #expect(manifest.files.contains("manifest.json"))
+    #expect(manifest.files.contains(glbURL.lastPathComponent))
+}
+
+@Test @MainActor func testRKADistinctFromUSDZ() async throws {
+    let usdzData = try await AssetCache.shared.usdzData()
+    #expect(!isRKAArchive(usdzData), "Plain USDZ data should not be identified as an RKA archive")
+
+    let glbURL = try await makeGLBTempURLForArchive()
+    defer { try? FileManager.default.removeItem(at: glbURL) }
+    let archive = try await Entity.archiveAsset(url: glbURL)
+    #expect(isRKAArchive(archive), "GLB archive should be identified as an RKA archive")
+}
+
+@Test @MainActor func testArchiveRoundTripUSDZ() async throws {
+    // Write the teapot USDZ data to a temp file so archiveAsset has a local URL to work with.
+    let usdzData = try await AssetCache.shared.usdzData()
+    let usdzURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("usdz")
+    try usdzData.write(to: usdzURL)
+    defer { try? FileManager.default.removeItem(at: usdzURL) }
+
+    let archive = try await Entity.archiveAsset(url: usdzURL)
+    let manifest = try rkaManifest(from: archive)
+    #expect(manifest.format == "usdz")
+    #expect(manifest.files.count == 2)
+
+    let loaded = try await Entity.from3DAsset(archive: archive)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded entity should contain geometry")
+    #expect(mesh.vertexCount > 0)
+    #expect(mesh.indexCount > 0)
+}
+
+@Test @MainActor func testArchiveRoundTripDAE() async throws {
+    // Write Box GLB → DAE, then archive and reload the DAE.
+    let source = try await loadBoxEntity()
+    let daeURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: daeURL) }
+
+    try await source.write3DAsset(to: daeURL)
+
+    let archive = try await Entity.archiveAsset(url: daeURL)
+    let manifest = try rkaManifest(from: archive)
+    #expect(manifest.format == "dae")
+
+    let loaded = try await Entity.from3DAsset(archive: archive)
+    let mesh = try #require(meshSpec(from: loaded), "Loaded entity should contain geometry")
+    #expect(mesh.vertexCount == sourceVertexCount)
+    #expect(mesh.indexCount == sourceIndexCount)
+}
