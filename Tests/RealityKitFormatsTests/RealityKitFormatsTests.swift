@@ -135,14 +135,10 @@ private func makeGLBTempURL() async throws -> URL {
     let sourceMat = try #require(materialSpec(from: source), "Source should have a PBR material")
     let loadedMat = try #require(materialSpec(from: loaded), "Reloaded USDZ should have a PBR material")
 
-    // Image textures are currently lost during USDZ export: the writeMDLAsset path in
-    // ModelIO-to-RealityKit does not embed TextureResource data into the USDZ archive.
-    withKnownIssue("USDZ export does not yet preserve image textures") {
-        #expect(loadedMat.hasBaseColorTexture == sourceMat.hasBaseColorTexture,
-                "Base color texture assignment should survive USDZ round-trip")
-        #expect(loadedMat.hasNormalTexture == sourceMat.hasNormalTexture,
-                "Normal map assignment should survive USDZ round-trip")
-    }
+    #expect(loadedMat.hasBaseColorTexture == sourceMat.hasBaseColorTexture,
+            "Base color texture assignment should survive USDZ round-trip")
+    #expect(loadedMat.hasNormalTexture == sourceMat.hasNormalTexture,
+            "Normal map assignment should survive USDZ round-trip")
 }
 
 // MARK: - Unified Loader Tests
