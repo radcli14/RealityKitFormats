@@ -28,7 +28,7 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             RealityViewFromRemote(url: url, targetFormat: targetFormat)
-                .id(url)
+                .id(url.absoluteString + targetFormat.rawValue)
                 .toolbar {
                     ToolbarItemGroup {
                         Menu {
@@ -39,6 +39,17 @@ struct ContentView: View {
                             }
                         } label: {
                             Label("Select Model", systemImage: "cube.transparent")
+                        }
+                    }
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Menu {
+                            Picker("Target Format", selection: $targetFormat) {
+                                ForEach(Format3D.allCases, id: \.self) { format in
+                                    Text(format.rawValue).tag(format)
+                                }
+                            }
+                        } label: {
+                            Label(targetFormat.rawValue, systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
                 }
@@ -93,7 +104,15 @@ struct RealityViewFromRemote: View {
     var body: some View {
         RealityView { content in
             do {
-                let entity = try await Entity.from3DAsset(url: url)
+                var entity = try await Entity.from3DAsset(url: url)
+                
+                // Do a round trip to the target format
+                let ext = targetFormat.rawValue.lowercased()
+                if ext != url.pathExtension {
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("TempAsset.\(ext)")
+                    try await entity.write3DAsset(to: tempURL)
+                    entity = try await Entity.from3DAsset(url: tempURL)
+                }
             
                 // Sanitize the entire assembly tree, preserving all sub-parts
                 entity.sanitizeCameraComponents()
@@ -132,8 +151,17 @@ struct RealityViewFromRemote: View {
         }
         .realityViewCameraControls(.orbit)
         .navigationTitle(url.lastPathComponent)
-        //.navigationSubtitle(targetFormat.rawValue)
+#if os(iOS)
+        .navigationSubtitle(subtitle)
+#endif
         .edgesIgnoringSafeArea(.all)
+    }
+    
+    private var subtitle: String {
+        switch targetFormat.rawValue.lowercased() {
+        case url.pathExtension: "Original"
+        default: "Converted to \(targetFormat.rawValue)"
+        }
     }
 }
 
