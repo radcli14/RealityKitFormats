@@ -46,12 +46,6 @@ let entity = try await Entity.from3DAsset(url: localURL)
 let entity = try await Entity.from3DAsset(url: URL(string: "https://example.com/model.usdz")!)
 ```
 
-`ModelEntity` is a subclass of `Entity`, so cast the result if you need it:
-
-```swift
-let model = try await Entity.from3DAsset(url: url) as? ModelEntity
-```
-
 ### Remote URL handling
 
 Remote URLs are handled per format to preserve external asset references:
@@ -131,7 +125,7 @@ Each format also exposes its own static loader if you want to call it directly:
 
 ```swift
 // STL, OBJ, PLY, ABC
-let entity = try await ModelEntity.fromMDLAsset(url: url)
+let entity = try await Entity.fromMDLAsset(url: url)
 
 // DAE / COLLADA
 let entity = try await ModelEntity.fromDAEAsset(url: url)

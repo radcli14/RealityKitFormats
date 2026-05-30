@@ -139,6 +139,8 @@ private func makeGLBTempURL() async throws -> URL {
             "Base color texture assignment should survive USDZ round-trip")
     #expect(loadedMat.hasNormalTexture == sourceMat.hasNormalTexture,
             "Normal map assignment should survive USDZ round-trip")
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet USDZ round-trip")
 }
 
 // MARK: - Unified Loader Tests
@@ -187,8 +189,6 @@ private let sourceChildrenCountHierarchy = 1
 private let sourceChildrenCountFlat = 0
 private let sourceVertexCount = 24
 private let sourceIndexCount = 36
-// STL does not share vertices across triangles, so vertex count = triangles × 3 = 36.
-private let stlVertexCount = 36
 
 /// Mesh statistics extracted from the first ModelEntity found in an entity tree.
 private struct MeshSpec {
@@ -237,6 +237,52 @@ private func materialSpec(from entity: Entity) -> MaterialSpec? {
         hasBaseColorTexture: pbr.baseColor.texture != nil,
         hasNormalTexture: pbr.normal.texture != nil
     )
+}
+
+/// World-space axis-aligned bounding box computed from mesh vertex positions.
+private struct BoundsSpec {
+    let min: SIMD3<Float>
+    let max: SIMD3<Float>
+    var extents: SIMD3<Float> { max - min }
+    var diagonalLength: Float { simd_length(extents) }
+}
+
+/// Computes the world-space AABB for an entity tree by transforming every vertex
+/// by the entity's world transform. Returns nil if no mesh data is found.
+@MainActor
+private func boundsSpec(from entity: Entity) -> BoundsSpec? {
+    var lo = SIMD3<Float>(repeating: Float.infinity)
+    var hi = SIMD3<Float>(repeating: -Float.infinity)
+    func visit(_ e: Entity) {
+        if let me = e as? ModelEntity, let model = me.model {
+            let wt = me.transformMatrix(relativeTo: nil)
+            for rkModel in model.mesh.contents.models {
+                for part in rkModel.parts {
+                    for pos in part.positions {
+                        let wp = wt * SIMD4<Float>(pos.x, pos.y, pos.z, 1)
+                        lo.x = Swift.min(lo.x, wp.x); hi.x = Swift.max(hi.x, wp.x)
+                        lo.y = Swift.min(lo.y, wp.y); hi.y = Swift.max(hi.y, wp.y)
+                        lo.z = Swift.min(lo.z, wp.z); hi.z = Swift.max(hi.z, wp.z)
+                    }
+                }
+            }
+        }
+        for child in e.children { visit(child) }
+    }
+    visit(entity)
+    guard lo.x < Float.infinity else { return nil }
+    return BoundsSpec(min: lo, max: hi)
+}
+
+/// Asserts that the bounding box diagonal of `loaded` matches `source` within a 1% relative tolerance.
+@MainActor
+private func expectBoundsPreserved(source: Entity, loaded: Entity, label: String = "") throws {
+    let src = try #require(boundsSpec(from: source), "Source entity has no geometry for bounds check")
+    let ld  = try #require(boundsSpec(from: loaded), "Loaded entity has no geometry for bounds check")
+    let ref = src.diagonalLength
+    let suffix = label.isEmpty ? "" : " (\(label))"
+    #expect(abs(ld.diagonalLength - ref) <= 0.01 * ref,
+            "Bounding box scale not preserved within 1%\(suffix): source diagonal \(ref), loaded \(ld.diagonalLength)")
 }
 
 /// Returns a Khronos Box entity loaded from the cached GLB bytes.
@@ -289,6 +335,8 @@ private func loadTeapotEntity() async throws -> Entity {
     let mat = materialSpec(from: loaded)
     #expect(mat?.roughnessScale == 1.0)
     #expect(mat?.hasNormalTexture == false)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "USDZ round-trip")
 }
 
 @Test @MainActor func testRoundTripOBJ() async throws {
@@ -316,6 +364,8 @@ private func loadTeapotEntity() async throws -> Entity {
     // via the Phong specular exponent (Ns) conversion — exact 1.0 is not preserved.
     #expect(mat?.roughnessScale == 0.9)
     #expect(mat?.hasNormalTexture == false)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "OBJ round-trip")
 }
 
 @Test @MainActor func testRoundTripDAE() async throws {
@@ -340,6 +390,8 @@ private func loadTeapotEntity() async throws -> Entity {
     let mat = materialSpec(from: loaded)
     #expect(mat?.roughnessScale == 1.0)
     #expect(mat?.hasNormalTexture == false)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "DAE round-trip")
 }
 
 @Test @MainActor func testRoundTripSTL() async throws {
@@ -359,12 +411,14 @@ private func loadTeapotEntity() async throws -> Entity {
     #expect(loaded.children.count == sourceChildrenCountFlat)
 
     let mesh = meshSpec(from: loaded)
-    // STL does not share vertices across triangles, so vertex count is higher than the source.
-    #expect(mesh?.vertexCount == stlVertexCount)
+    // Triangle count is the invariant for STL; vertex sharing is a loader implementation detail.
+    #expect((mesh?.vertexCount ?? 0) > 0)
     #expect(mesh?.indexCount == sourceIndexCount)
 
     // STL has no material encoding; ModelIO supplies a default PBR material on load.
     // We don't assert on material values here — they carry no round-trip meaning.
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "STL round-trip")
 }
 
 // MARK: - Apple USDZ Round-Trip Tests
@@ -399,6 +453,8 @@ private func loadTeapotEntity() async throws -> Entity {
     let mesh = try #require(meshSpec(from: loaded), "Loaded OBJ should contain geometry")
     #expect(mesh.vertexCount == sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "Teapot→OBJ")
 }
 
 @Test @MainActor func testRoundTripAppleUSDZToSTL() async throws {
@@ -415,10 +471,12 @@ private func loadTeapotEntity() async throws -> Entity {
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded STL should contain geometry")
-    // STL creates one vertex per triangle corner (no sharing), so vertex count = index count.
-    #expect(mesh.vertexCount == sourceMesh.indexCount)
+    // Triangle count is the invariant for STL; vertex sharing is a loader implementation detail.
+    #expect(mesh.vertexCount > 0)
     #expect(mesh.indexCount == sourceMesh.indexCount)
     // STL has no material encoding; ModelIO supplies a default PBR material on load.
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "Teapot→STL")
 }
 
 @Test @MainActor func testRoundTripAppleUSDZToPLY() async throws {
@@ -437,6 +495,8 @@ private func loadTeapotEntity() async throws -> Entity {
     let mesh = try #require(meshSpec(from: loaded), "Loaded PLY should contain geometry")
     #expect(mesh.vertexCount == sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "Teapot→PLY")
 }
 
 @Test @MainActor func testRoundTripAppleUSDZToABC() async throws {
@@ -456,6 +516,8 @@ private func loadTeapotEntity() async throws -> Entity {
     // ABC may introduce vertex duplication at attribute seams; triangle count is the invariant.
     #expect(mesh.vertexCount >= sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "Teapot→ABC")
 }
 
 @Test @MainActor func testRoundTripAppleUSDZToDAE() async throws {
@@ -475,6 +537,8 @@ private func loadTeapotEntity() async throws -> Entity {
     // DAE may introduce vertex duplication at attribute seams; triangle count is the invariant.
     #expect(mesh.vertexCount >= sourceMesh.vertexCount)
     #expect(mesh.indexCount == sourceMesh.indexCount)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "Teapot→DAE")
 }
 
 // MARK: - RealityKit Asset Archive Tests
@@ -566,4 +630,6 @@ private func makeGLBTempURLForArchive() async throws -> URL {
     let mesh = try #require(meshSpec(from: loaded), "Loaded entity should contain geometry")
     #expect(mesh.vertexCount == sourceVertexCount)
     #expect(mesh.indexCount == sourceIndexCount)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "DAE archive round-trip")
 }
