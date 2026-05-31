@@ -1,6 +1,11 @@
+# Other repositories where I have cloned a local copy
+ModelIO-to-RealityKit
+DAE-to-RealityKit
+
 # Automatically generated files
 .swiftpm/
 Package.resolved
+RealityKitFormatsViewer/RealityKitFormatsViewer.xcodeproj/xcshareddata/
 
 # Xcode
 #
