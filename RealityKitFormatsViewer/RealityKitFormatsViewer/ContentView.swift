@@ -67,7 +67,11 @@ struct ContentView: View {
     
     // -MARK: URL Options
     
-    private static let allURLs: [URL] = khronosGLBURLs + appleUSDZURLs + khronosDAEURLs
+    private static let allURLs: [URL] = khronosGLBURLs + appleUSDZURLs + khronosDAEURLs + localURLs
+
+    private static let localURLs: [URL] = [
+        Bundle.main.url(forResource: "left_hand", withExtension: "usdz")
+    ].compactMap { $0 }
     
     /// Base path on which you can find several GLB sample files hosted by Khronos Group
     private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/"
