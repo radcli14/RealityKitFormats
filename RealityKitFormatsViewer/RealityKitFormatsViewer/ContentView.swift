@@ -24,11 +24,12 @@ struct ContentView: View {
     
     @State private var showFilePicker = false
     @State private var showFormatPicker = false
-    
+    @State private var forceConversion = false
+
     var body: some View {
         NavigationStack {
-            RealityViewFromRemote(url: url, targetFormat: targetFormat)
-                .id(url.absoluteString + targetFormat.rawValue)
+            RealityViewFromRemote(url: url, targetFormat: targetFormat, forceConversion: forceConversion)
+                .id(url.absoluteString + targetFormat.rawValue + (forceConversion ? "1" : "0"))
                 .toolbar {
                     ToolbarItemGroup {
                         Menu {
@@ -51,6 +52,13 @@ struct ContentView: View {
                         } label: {
                             Label(targetFormat.rawValue, systemImage: "arrow.triangle.2.circlepath")
                         }
+                    }
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Picker("Load Mode", selection: $forceConversion) {
+                            Text("Direct").tag(false)
+                            Text("Round-trip").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                     }
                 }
         }
@@ -97,6 +105,7 @@ struct ContentView: View {
 struct RealityViewFromRemote: View {
     let url: URL
     let targetFormat: Format3D
+    let forceConversion: Bool
     
     @State private var camera = PerspectiveCamera()
     @State private var error: (any Error)?
@@ -108,7 +117,7 @@ struct RealityViewFromRemote: View {
                 
                 // Do a round trip to the target format
                 let ext = targetFormat.rawValue.lowercased()
-                if ext != url.pathExtension {
+                if ext != url.pathExtension || forceConversion {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("TempAsset.\(ext)")
                     try await entity.write3DAsset(to: tempURL)
                     entity = try await Entity.from3DAsset(url: tempURL)
@@ -158,10 +167,10 @@ struct RealityViewFromRemote: View {
     }
     
     private var subtitle: String {
-        switch targetFormat.rawValue.lowercased() {
-        case url.pathExtension: "Original"
-        default: "Converted to \(targetFormat.rawValue)"
-        }
+        let ext = targetFormat.rawValue.lowercased()
+        if ext != url.pathExtension { return "Converted to \(targetFormat.rawValue)" }
+        if forceConversion { return "Round-tripped as \(targetFormat.rawValue)" }
+        return "Original"
     }
 }
 
