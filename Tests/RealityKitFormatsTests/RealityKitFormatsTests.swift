@@ -204,6 +204,14 @@ private struct MaterialSpec {
     let hasNormalTexture: Bool
 }
 
+/// Per-part geometry and material-assignment details extracted from the full entity tree.
+private struct PartDetailSpec {
+    let materialIndex: Int
+    let vertexCount: Int
+    let uvCount: Int            // 0 if no texture coordinates present
+    let firstUV: SIMD2<Float>?  // first vertex UV for V-flip spot-check; nil if no UVs
+}
+
 /// Finds the first ModelComponent anywhere in the entity tree (depth-first).
 @MainActor
 private func firstModelComponent(in entity: Entity) -> ModelComponent? {
@@ -226,6 +234,30 @@ private func meshSpec(from entity: Entity) -> MeshSpec? {
         }
     }
     return MeshSpec(vertexCount: vertices, indexCount: indices)
+}
+
+/// Collects per-part material index and UV presence for every mesh part in the entity tree (depth-first).
+@MainActor
+private func partDetailSpecs(from entity: Entity) -> [PartDetailSpec] {
+    var specs: [PartDetailSpec] = []
+    func visit(_ e: Entity) {
+        if let me = e as? ModelEntity, let model = me.model {
+            for rkModel in model.mesh.contents.models {
+                for part in rkModel.parts {
+                    let uvElements = part.textureCoordinates?.elements
+                    specs.append(PartDetailSpec(
+                        materialIndex: part.materialIndex,
+                        vertexCount: part.positions.count,
+                        uvCount: uvElements?.count ?? 0,
+                        firstUV: uvElements?.first
+                    ))
+                }
+            }
+        }
+        for child in e.children { visit(child) }
+    }
+    visit(entity)
+    return specs
 }
 
 @MainActor
@@ -272,6 +304,25 @@ private func boundsSpec(from entity: Entity) -> BoundsSpec? {
     visit(entity)
     guard lo.x < Float.infinity else { return nil }
     return BoundsSpec(min: lo, max: hi)
+}
+
+/// Asserts that the primary (longest) axis of the bounding box is the same between source and loaded.
+/// A mismatch means the model was rotated during export — an up-vector or coordinate-system flip.
+@MainActor
+private func expectOrientationPreserved(source: Entity, loaded: Entity, label: String = "") throws {
+    let src = try #require(boundsSpec(from: source), "Source entity has no geometry for orientation check")
+    let ld  = try #require(boundsSpec(from: loaded), "Loaded entity has no geometry for orientation check")
+    func primaryAxis(_ ext: SIMD3<Float>) -> Int {
+        if ext.y >= ext.x && ext.y >= ext.z { return 1 }
+        if ext.x >= ext.y && ext.x >= ext.z { return 0 }
+        return 2
+    }
+    let srcAxis = primaryAxis(src.extents)
+    let ldAxis  = primaryAxis(ld.extents)
+    let names   = ["X", "Y", "Z"]
+    let suffix  = label.isEmpty ? "" : " (\(label))"
+    #expect(ldAxis == srcAxis,
+            "Primary extent axis should match\(suffix): source=\(names[srcAxis]) \(src.extents), loaded=\(names[ldAxis]) \(ld.extents)")
 }
 
 /// Asserts that the bounding box diagonal of `loaded` matches `source` within a 1% relative tolerance.
@@ -321,6 +372,22 @@ private func loadTeapotEntity() async throws -> Entity {
     #expect(mat?.roughnessScale == 1.0)
     #expect(mat?.hasNormalTexture == false)
 
+    let srcParts = partDetailSpecs(from: source)
+    let ldParts  = partDetailSpecs(from: loaded)
+    #expect(ldParts.count == srcParts.count, "Mesh part count should match after GLB round-trip")
+    for (i, (src, ld)) in zip(srcParts, ldParts).enumerated() {
+        #expect(ld.materialIndex == src.materialIndex, "Part \(i) material index should survive GLB round-trip")
+        if src.uvCount > 0 {
+            #expect(ld.uvCount > 0, "Part \(i) texture coordinates should survive GLB round-trip")
+            #expect(ld.uvCount == ld.vertexCount, "Part \(i) UV count should equal vertex count")
+            if let srcUV = src.firstUV, let ldUV = ld.firstUV {
+                #expect(abs(ldUV.y - srcUV.y) < 0.02,
+                        "Part \(i) first-vertex V should be preserved (V-flip check): source=\(srcUV.y), loaded=\(ldUV.y)")
+            }
+        }
+    }
+
+    try expectOrientationPreserved(source: source, loaded: loaded, label: "GLB round-trip")
     try expectBoundsPreserved(source: source, loaded: loaded, label: "GLB round-trip")
 }
 
@@ -350,6 +417,22 @@ private func loadTeapotEntity() async throws -> Entity {
     #expect(ldMat.hasNormalTexture    == srcMat.hasNormalTexture,
             "Normal map should survive GLB round-trip")
 
+    let srcParts = partDetailSpecs(from: source)
+    let ldParts  = partDetailSpecs(from: loaded)
+    #expect(ldParts.count == srcParts.count, "Mesh part count should match after GLB round-trip")
+    for (i, (src, ld)) in zip(srcParts, ldParts).enumerated() {
+        #expect(ld.materialIndex == src.materialIndex, "Part \(i) material index should survive GLB round-trip")
+        if src.uvCount > 0 {
+            #expect(ld.uvCount > 0, "Part \(i) texture coordinates should survive GLB round-trip")
+            #expect(ld.uvCount == ld.vertexCount, "Part \(i) UV count should equal vertex count")
+            if let srcUV = src.firstUV, let ldUV = ld.firstUV {
+                #expect(abs(ldUV.y - srcUV.y) < 0.02,
+                        "Part \(i) first-vertex V should be preserved (V-flip check): source=\(srcUV.y), loaded=\(ldUV.y)")
+            }
+        }
+    }
+
+    try expectOrientationPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
     try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
 }
 
