@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		8A456EF02FC6121600F9BD76 /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A456EEF2FC6121600F9BD76 /* RealityKitFormats */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RealityKitFormatsViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -27,7 +23,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A456EF02FC6121600F9BD76 /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +65,6 @@
 			);
 			name = RealityKitFormatsViewer;
 			packageProductDependencies = (
-				8A456EEF2FC6121600F9BD76 /* RealityKitFormats */,
 			);
 			productName = RealityKitFormatsViewer;
 			productReference = 8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */;
@@ -101,7 +95,6 @@
 			mainGroup = 8A456ED72FC610BC00F9BD76;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8A456EEE2FC6121600F9BD76 /* XCRemoteSwiftPackageReference "RealityKitFormats" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8A456EE12FC610BC00F9BD76 /* Products */;
@@ -360,25 +353,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		8A456EEE2FC6121600F9BD76 /* XCRemoteSwiftPackageReference "RealityKitFormats" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/radcli14/RealityKitFormats";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.5.2;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		8A456EEF2FC6121600F9BD76 /* RealityKitFormats */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8A456EEE2FC6121600F9BD76 /* XCRemoteSwiftPackageReference "RealityKitFormats" */;
-			productName = RealityKitFormats;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8A456ED82FC610BC00F9BD76 /* Project object */;
 }
