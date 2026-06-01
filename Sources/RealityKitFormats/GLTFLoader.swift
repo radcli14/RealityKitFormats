@@ -9,6 +9,13 @@ import GLTFKit2
 
 public extension Entity {
 
+    /// Export this entity tree to a GLB file at the specified URL.
+    @MainActor
+    func writeGLTFAsset(to url: URL) async throws {
+        let exporter = GLTFRealityKitExporter()
+        try exporter.writeEntity(self, to: url)
+    }
+
     /// Load an Entity from a GLTF or GLB file at the specified URL.
     ///
     /// GLTF scenes may contain multiple meshes, lights, and cameras as a full

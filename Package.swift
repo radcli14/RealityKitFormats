@@ -17,7 +17,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/radcli14/ModelIO-to-RealityKit", from: "0.4.1"),
         .package(url: "https://github.com/radcli14/DAE-to-RealityKit", from: "0.4.1"),
-        .package(url: "https://github.com/warrenm/GLTFKit2", from: "0.5.15"),
+        .package(url: "https://github.com/radcli14/GLTFKit2", branch: "realitykit-export"),
     ],
     targets: [
         .target(

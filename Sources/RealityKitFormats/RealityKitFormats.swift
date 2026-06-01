@@ -210,6 +210,7 @@ public extension Entity {
     /// Write the entity's mesh data to a local file URL using the format-appropriate serializer.
     ///
     /// Supported formats:
+    /// - **GLB, GLTF** — written via GLTFKit2 (radcli14/GLTFKit2)
     /// - **STL, OBJ, PLY, ABC, USDZ** — written via ModelIO (radcli14/ModelIO-to-RealityKit)
     /// - **DAE** (Collada) — written via COLLADA serializer (radcli14/DAE-to-RealityKit)
     ///
@@ -224,6 +225,8 @@ public extension Entity {
     @MainActor
     func write3DAsset(to url: URL) async throws {
         switch url.pathExtension.lowercased() {
+        case "glb", "gltf":
+            try await writeGLTFAsset(to: url)
         case "stl", "obj", "ply", "abc", "usdz", "usd":
             try await writeMDLAsset(to: url)
         case "dae":

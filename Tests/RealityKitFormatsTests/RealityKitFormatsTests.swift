@@ -307,10 +307,50 @@ private func loadTeapotEntity() async throws -> Entity {
         .appendingPathExtension("glb")
     defer { try? FileManager.default.removeItem(at: outURL) }
 
-    // GLB write is not yet supported — expected to throw unsupportedFormat.
-    await withKnownIssue("GLB export is not supported") {
-        try await source.write3DAsset(to: outURL)
-    }
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "GLB file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+    #expect(loaded.children.count == sourceChildrenCountHierarchy)
+
+    let mesh = meshSpec(from: loaded)
+    #expect(mesh?.vertexCount == sourceVertexCount)
+    #expect(mesh?.indexCount  == sourceIndexCount)
+
+    let mat = materialSpec(from: loaded)
+    #expect(mat?.roughnessScale == 1.0)
+    #expect(mat?.hasNormalTexture == false)
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "GLB round-trip")
+}
+
+@Test @MainActor func testRoundTripGLBDamagedHelmet() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let source = try await Entity.from3DAsset(data: data, format: "glb")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("glb")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "GLB file should exist after write")
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+
+    let srcMesh = try #require(meshSpec(from: source), "Source helmet should have geometry")
+    let ldMesh  = try #require(meshSpec(from: loaded), "Re-loaded helmet should have geometry")
+    #expect(ldMesh.vertexCount == srcMesh.vertexCount)
+    #expect(ldMesh.indexCount  == srcMesh.indexCount)
+
+    let srcMat = try #require(materialSpec(from: source), "Source should have a PBR material")
+    let ldMat  = try #require(materialSpec(from: loaded),  "Re-loaded should have a PBR material")
+    #expect(ldMat.hasBaseColorTexture == srcMat.hasBaseColorTexture,
+            "Base color texture should survive GLB round-trip")
+    #expect(ldMat.hasNormalTexture    == srcMat.hasNormalTexture,
+            "Normal map should survive GLB round-trip")
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
 }
 
 @Test @MainActor func testRoundTripUSDZ() async throws {
