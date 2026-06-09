@@ -1,5 +1,8 @@
 import Testing
+import CoreGraphics
 import Foundation
+import ImageIO
+import Metal
 @preconcurrency import RealityKit
 @testable import RealityKitFormats
 
@@ -96,6 +99,90 @@ private func makeGLBTempURL() async throws -> URL {
     let data = try await AssetCache.shared.glbData()
     let entity = try await Entity.fromGLTFAsset(data: data, format: "glb")
     #expect(entity.children.count == 1)
+}
+
+// MARK: - Texture Helpers
+
+/// Reads raw RGBA8 bytes from a TextureResource via Metal. Returns nil if Metal is unavailable.
+@MainActor
+private func readTextureBytes(_ resource: TextureResource) -> [UInt8]? {
+    guard let device = MTLCreateSystemDefaultDevice() else { return nil }
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .rgba8Unorm, width: resource.width, height: resource.height, mipmapped: false)
+    desc.usage = .shaderWrite
+    desc.storageMode = .shared
+    guard let tex = device.makeTexture(descriptor: desc) else { return nil }
+    try? resource.copy(to: tex)
+    let bpr = 4 * resource.width
+    var bytes = [UInt8](repeating: 0, count: resource.height * bpr)
+    bytes.withUnsafeMutableBytes { ptr in
+        tex.getBytes(ptr.baseAddress!, bytesPerRow: bpr,
+                     from: MTLRegion(origin: .init(), size: MTLSize(width: resource.width, height: resource.height, depth: 1)),
+                     mipmapLevel: 0)
+    }
+    return bytes
+}
+
+/// Computes the mean value of one RGBA channel (0=R,1=G,2=B,3=A) across all pixels.
+private func meanChannel(_ bytes: [UInt8], channel: Int) -> Float {
+    var sum: Int = 0
+    var i = channel
+    while i < bytes.count { sum += Int(bytes[i]); i += 4 }
+    let pixelCount = bytes.count / 4
+    return pixelCount > 0 ? Float(sum) / Float(pixelCount) : 0
+}
+
+// MARK: - PNG Encoding Diagnostic
+
+/// Checks whether CGImage/CGImageDestination alters pixel values during PNG encode.
+/// Encodes a known pixel value to PNG and decodes it back, comparing input to output.
+/// If this fails, the darkening happens inside makePNG (CGImage color space conversion).
+/// If this passes, the darkening happens inside GLTFKit2's texture loading pipeline.
+@Test func testPNGRoundTripPreservesValues() throws {
+    let inputBytes: [UInt8] = [64, 66, 66, 255]  // RGBA matching the DamagedHelmet base color mean
+
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let provider = CGDataProvider(data: Data(inputBytes) as CFData),
+          let cgImage = CGImage(width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 32,
+                                bytesPerRow: 4, space: colorSpace,
+                                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+                                provider: provider, decode: nil, shouldInterpolate: false,
+                                intent: .defaultIntent) else {
+        Issue.record("Failed to create CGImage from input bytes")
+        return
+    }
+
+    let pngData = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(pngData as CFMutableData, "public.png" as CFString, 1, nil) else {
+        Issue.record("Failed to create PNG destination")
+        return
+    }
+    CGImageDestinationAddImage(dest, cgImage, nil)
+    guard CGImageDestinationFinalize(dest) else {
+        Issue.record("Failed to finalize PNG")
+        return
+    }
+
+    // Decode the PNG back into a CGContext and read the pixel
+    guard let decodeProvider = CGDataProvider(data: pngData as CFData),
+          let decoded = CGImage(pngDataProviderSource: decodeProvider, decode: nil,
+                                shouldInterpolate: false, intent: .defaultIntent) else {
+        Issue.record("Failed to decode PNG")
+        return
+    }
+    var outputBytes = [UInt8](repeating: 0, count: 4)
+    outputBytes.withUnsafeMutableBytes { ptr in
+        // CGContext requires premultiplied alpha; .last (straight) is only valid for CGImage input.
+        // With alpha=255 the values are identical either way.
+        guard let ctx = CGContext(data: ptr.baseAddress, width: 1, height: 1,
+                                  bitsPerComponent: 8, bytesPerRow: 4, space: colorSpace,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)) else { return }
+        ctx.draw(decoded, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    }
+
+    #expect(outputBytes[0] == 64, "R after PNG encode/decode: \(outputBytes[0]) (expected 64) — CGImage is altering values")
+    #expect(outputBytes[1] == 66, "G after PNG encode/decode: \(outputBytes[1]) (expected 66)")
+    #expect(outputBytes[2] == 66, "B after PNG encode/decode: \(outputBytes[2]) (expected 66)")
 }
 
 // MARK: - PBR Material Tests
@@ -200,6 +287,7 @@ private struct MeshSpec {
 /// Material statistics extracted from the first PhysicallyBasedMaterial found in an entity tree.
 private struct MaterialSpec {
     let roughnessScale: Float
+    let baseColorTint: SIMD3<Float>
     let hasBaseColorTexture: Bool
     let hasNormalTexture: Bool
 }
@@ -264,8 +352,15 @@ private func partDetailSpecs(from entity: Entity) -> [PartDetailSpec] {
 private func materialSpec(from entity: Entity) -> MaterialSpec? {
     guard let comp = firstModelComponent(in: entity),
           let pbr = comp.materials.first as? PhysicallyBasedMaterial else { return nil }
+    var r: CGFloat = 1, g: CGFloat = 1, b: CGFloat = 1
+    #if os(macOS)
+    (pbr.baseColor.tint.usingColorSpace(.sRGB) ?? pbr.baseColor.tint).getRed(&r, green: &g, blue: &b, alpha: nil)
+    #else
+    pbr.baseColor.tint.getRed(&r, green: &g, blue: &b, alpha: nil)
+    #endif
     return MaterialSpec(
         roughnessScale: pbr.roughness.scale,
+        baseColorTint: SIMD3<Float>(Float(r), Float(g), Float(b)),
         hasBaseColorTexture: pbr.baseColor.texture != nil,
         hasNormalTexture: pbr.normal.texture != nil
     )
@@ -308,6 +403,8 @@ private func boundsSpec(from entity: Entity) -> BoundsSpec? {
 
 /// Asserts that the primary (longest) axis of the bounding box is the same between source and loaded.
 /// A mismatch means the model was rotated during export — an up-vector or coordinate-system flip.
+/// Skips the check when the two largest extents are within 5% of each other (nearly symmetric mesh
+/// such as a cube) because float rounding in the round-trip can flip the tie-breaking winner.
 @MainActor
 private func expectOrientationPreserved(source: Entity, loaded: Entity, label: String = "") throws {
     let src = try #require(boundsSpec(from: source), "Source entity has no geometry for orientation check")
@@ -317,12 +414,68 @@ private func expectOrientationPreserved(source: Entity, loaded: Entity, label: S
         if ext.x >= ext.y && ext.x >= ext.z { return 0 }
         return 2
     }
+    func isAmbiguous(_ ext: SIMD3<Float>) -> Bool {
+        let sorted = [ext.x, ext.y, ext.z].sorted(by: >)
+        return sorted[0] < 1.05 * sorted[1]
+    }
+    guard !isAmbiguous(src.extents) else { return }
     let srcAxis = primaryAxis(src.extents)
     let ldAxis  = primaryAxis(ld.extents)
     let names   = ["X", "Y", "Z"]
     let suffix  = label.isEmpty ? "" : " (\(label))"
     #expect(ldAxis == srcAxis,
             "Primary extent axis should match\(suffix): source=\(names[srcAxis]) \(src.extents), loaded=\(names[ldAxis]) \(ld.extents)")
+}
+
+/// Collects every UV coordinate from the entire entity tree in depth-first order.
+@MainActor
+private func allUVCoordinates(from entity: Entity) -> [SIMD2<Float>] {
+    var uvs: [SIMD2<Float>] = []
+    func visit(_ e: Entity) {
+        if let me = e as? ModelEntity, let model = me.model {
+            for rkModel in model.mesh.contents.models {
+                for part in rkModel.parts {
+                    if let partUVs = part.textureCoordinates?.elements {
+                        uvs.append(contentsOf: partUVs)
+                    }
+                }
+            }
+        }
+        for child in e.children { visit(child) }
+    }
+    visit(entity)
+    return uvs
+}
+
+/// Samples up to 100 UV coordinates at regular intervals and compares source vs loaded.
+/// Detects V-flip, UV region collapse (all vertices mapping to the same texture area),
+/// and other systematic UV mapping errors that per-vertex count checks miss.
+@MainActor
+private func expectUVsPreserved(source: Entity, loaded: Entity, label: String = "") throws {
+    let srcUVs = allUVCoordinates(from: source)
+    let ldUVs  = allUVCoordinates(from: loaded)
+    let suffix = label.isEmpty ? "" : " (\(label))"
+
+    guard !srcUVs.isEmpty else { return }
+    #expect(ldUVs.count == srcUVs.count,
+            "Total UV count mismatch\(suffix): source=\(srcUVs.count), loaded=\(ldUVs.count)")
+    guard ldUVs.count == srcUVs.count else { return }
+
+    let stride = max(1, srcUVs.count / 100)
+    var sumU: Float = 0, sumV: Float = 0, n = 0
+    var i = 0
+    while i < srcUVs.count {
+        sumU += abs(ldUVs[i].x - srcUVs[i].x)
+        sumV += abs(ldUVs[i].y - srcUVs[i].y)
+        n += 1
+        i += stride
+    }
+    let meanUErr = sumU / Float(n)
+    let meanVErr = sumV / Float(n)
+    #expect(meanUErr < 0.02,
+            "Mean absolute U error across \(n) sampled vertices\(suffix): \(meanUErr) — UV mapping error")
+    #expect(meanVErr < 0.02,
+            "Mean absolute V error across \(n) sampled vertices\(suffix): \(meanVErr) — V-flip or UV mapping error")
 }
 
 /// Asserts that the bounding box diagonal of `loaded` matches `source` within a 1% relative tolerance.
@@ -388,7 +541,49 @@ private func loadTeapotEntity() async throws -> Entity {
     }
 
     try expectOrientationPreserved(source: source, loaded: loaded, label: "GLB round-trip")
+    try expectUVsPreserved(source: source, loaded: loaded, label: "GLB round-trip")
     try expectBoundsPreserved(source: source, loaded: loaded, label: "GLB round-trip")
+}
+
+/// Verifies that the base color texture content is preserved through a GLB round-trip.
+/// Compares the mean R, G, B pixel values of the source and loaded base color textures.
+/// Fails if the wrong image ends up in the base color slot (e.g. the ORM or normal map).
+@Test @MainActor func testRoundTripGLBDamagedHelmetBaseColorTexture() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let source = try await Entity.from3DAsset(data: data, format: "glb")
+
+    guard let srcComp = firstModelComponent(in: source),
+          let srcPBR  = srcComp.materials.first as? PhysicallyBasedMaterial,
+          let srcBC   = srcPBR.baseColor.texture?.resource,
+          let srcBytes = readTextureBytes(srcBC) else {
+        Issue.record("Could not read source base color texture")
+        return
+    }
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString).appendingPathExtension("glb")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+    try await source.write3DAsset(to: outURL)
+    let loaded = try await Entity.from3DAsset(url: outURL)
+
+    guard let ldComp = firstModelComponent(in: loaded),
+          let ldPBR  = ldComp.materials.first as? PhysicallyBasedMaterial,
+          let ldBC   = ldPBR.baseColor.texture?.resource,
+          let ldBytes = readTextureBytes(ldBC) else {
+        Issue.record("Could not read loaded base color texture")
+        return
+    }
+
+    let srcR = meanChannel(srcBytes, channel: 0)
+    let srcG = meanChannel(srcBytes, channel: 1)
+    let srcB = meanChannel(srcBytes, channel: 2)
+    let ldR  = meanChannel(ldBytes,  channel: 0)
+    let ldG  = meanChannel(ldBytes,  channel: 1)
+    let ldB  = meanChannel(ldBytes,  channel: 2)
+
+    #expect(abs(ldR - srcR) < 10, "Base color mean R should be preserved: src=\(srcR), loaded=\(ldR)")
+    #expect(abs(ldG - srcG) < 10, "Base color mean G should be preserved: src=\(srcG), loaded=\(ldG)")
+    #expect(abs(ldB - srcB) < 10, "Base color mean B should be preserved: src=\(srcB), loaded=\(ldB)")
 }
 
 @Test @MainActor func testRoundTripGLBDamagedHelmet() async throws {
@@ -433,6 +628,7 @@ private func loadTeapotEntity() async throws -> Entity {
     }
 
     try expectOrientationPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
+    try expectUVsPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
     try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet GLB round-trip")
 }
 
@@ -482,11 +678,21 @@ private func loadTeapotEntity() async throws -> Entity {
     #expect(mesh?.vertexCount == sourceVertexCount)
     #expect(mesh?.indexCount == sourceIndexCount)
 
+    let sourceMat = materialSpec(from: source)
     let mat = materialSpec(from: loaded)
-    // OBJ/MTL uses Phong shading, not PBR. Roughness survives as an approximation
-    // via the Phong specular exponent (Ns) conversion — exact 1.0 is not preserved.
-    #expect(mat?.roughnessScale == 0.9)
+    // We write Ns = 2/roughness²−2 and read back roughness = sqrt(2/(Ns+2)), which
+    // gives exact round-trip. For source roughness=1.0 → Ns=0 → loaded roughness=1.0.
+    #expect(mat?.roughnessScale == 1.0)
     #expect(mat?.hasNormalTexture == false)
+    // Kd is now written from baseColorTint and read back via the .diffuse semantic fallback.
+    if let src = sourceMat, let ld = mat {
+        #expect(abs(ld.baseColorTint.x - src.baseColorTint.x) < 0.05,
+                "OBJ round-trip should preserve base color R: src=\(src.baseColorTint.x), loaded=\(ld.baseColorTint.x)")
+        #expect(abs(ld.baseColorTint.y - src.baseColorTint.y) < 0.05,
+                "OBJ round-trip should preserve base color G: src=\(src.baseColorTint.y), loaded=\(ld.baseColorTint.y)")
+        #expect(abs(ld.baseColorTint.z - src.baseColorTint.z) < 0.05,
+                "OBJ round-trip should preserve base color B: src=\(src.baseColorTint.z), loaded=\(ld.baseColorTint.z)")
+    }
 
     try expectBoundsPreserved(source: source, loaded: loaded, label: "OBJ round-trip")
 }

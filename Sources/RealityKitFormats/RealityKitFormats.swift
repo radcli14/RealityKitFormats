@@ -223,12 +223,12 @@ public extension Entity {
     /// - Throws: `RealityKitFormatsError.unsupportedFormat` for unrecognised extensions,
     ///   or a writer-specific error on failure.
     @MainActor
-    func write3DAsset(to url: URL) async throws {
+    func write3DAsset(to url: URL, mergeSubmeshes: Bool = false) async throws {
         switch url.pathExtension.lowercased() {
         case "glb", "gltf":
             try await writeGLTFAsset(to: url)
         case "stl", "obj", "ply", "abc", "usdz", "usd":
-            try await writeMDLAsset(to: url)
+            try await writeMDLAsset(to: url, mergeSubmeshes: mergeSubmeshes)
         case "dae":
             try await writeDAEAsset(to: url)
         default:

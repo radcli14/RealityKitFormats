@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8A3F2D0C2FCD74920025CA3A /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A3F2D0B2FCD74920025CA3A /* RealityKitFormats */; };
+		8A4527B82FD84BAB000E2C1B /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A4527B72FD84BAB000E2C1B /* RealityKitFormats */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,7 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A3F2D0C2FCD74920025CA3A /* RealityKitFormats in Frameworks */,
+				8A4527B82FD84BAB000E2C1B /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +70,7 @@
 			);
 			name = RealityKitFormatsViewer;
 			packageProductDependencies = (
-				8A3F2D0B2FCD74920025CA3A /* RealityKitFormats */,
+				8A4527B72FD84BAB000E2C1B /* RealityKitFormats */,
 			);
 			productName = RealityKitFormatsViewer;
 			productReference = 8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */;
@@ -101,7 +101,7 @@
 			mainGroup = 8A456ED72FC610BC00F9BD76;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8A3F2D0A2FCD74920025CA3A /* XCRemoteSwiftPackageReference "RealityKitFormats" */,
+				8A4527B62FD84BAB000E2C1B /* XCRemoteSwiftPackageReference "RealityKitFormats" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8A456EE12FC610BC00F9BD76 /* Products */;
@@ -362,20 +362,20 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		8A3F2D0A2FCD74920025CA3A /* XCRemoteSwiftPackageReference "RealityKitFormats" */ = {
+		8A4527B62FD84BAB000E2C1B /* XCRemoteSwiftPackageReference "RealityKitFormats" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/radcli14/RealityKitFormats";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.6.11;
+				minimumVersion = 0.6.12;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		8A3F2D0B2FCD74920025CA3A /* RealityKitFormats */ = {
+		8A4527B72FD84BAB000E2C1B /* RealityKitFormats */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8A3F2D0A2FCD74920025CA3A /* XCRemoteSwiftPackageReference "RealityKitFormats" */;
+			package = 8A4527B62FD84BAB000E2C1B /* XCRemoteSwiftPackageReference "RealityKitFormats" */;
 			productName = RealityKitFormats;
 		};
 /* End XCSwiftPackageProductDependency section */
