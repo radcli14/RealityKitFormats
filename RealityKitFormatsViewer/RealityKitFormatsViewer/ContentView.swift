@@ -2,29 +2,19 @@
 //  ContentView.swift
 //  RealityKitFormatsViewer
 //
-//  Created by Eliott Radcliffe on 5/26/26.
-//
 
 import SwiftUI
 import RealityKit
 import RealityKitFormats
 
-enum Format3D: String, CaseIterable {
-    case glb = "GLB"
-    case usdz = "USDZ"
-    case dae = "DAE"
-    case obj = "OBJ"
-    case stl = "STL"
-}
-
 struct ContentView: View {
 
-    @State private var url = Self.khronosGLBURLs.first!
-    @State private var targetFormat: Format3D = .glb
-    
+    @State private var url: URL = Self.testURL ?? URLOptions.allURLs.first!
+    @State private var targetFormat: Format3D = Self.testFormat ?? .glb
+    @State private var forceConversion: Bool = ProcessInfo.processInfo.environment["UITEST_FORCE_CONVERSION"] == "true"
+
     @State private var showFilePicker = false
     @State private var showFormatPicker = false
-    @State private var forceConversion = false
 
     var body: some View {
         NavigationStack {
@@ -34,7 +24,7 @@ struct ContentView: View {
                     ToolbarItemGroup {
                         Menu {
                             Picker("Select Model", selection: $url) {
-                                ForEach(Self.allURLs, id: \.self) { assetURL in
+                                ForEach(URLOptions.allURLs, id: \.self) { assetURL in
                                     Text(assetURL.lastPathComponent).tag(assetURL)
                                 }
                             }
@@ -62,47 +52,16 @@ struct ContentView: View {
                     }
                 }
         }
-
-    }
-    
-    // -MARK: URL Options
-    
-    private static let allURLs: [URL] = khronosGLBURLs + appleUSDZURLs + khronosDAEURLs + localURLs
-
-    private static let localURLs: [URL] = [
-        Bundle.main.url(forResource: "left_hand", withExtension: "usdz")
-    ].compactMap { $0 }
-    
-    /// Base path on which you can find several GLB sample files hosted by Khronos Group
-    private static let khronosBaseGLBURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/"
-
-    /// A list of files available on the Khronos Group path
-    private static let khronosGLBFiles = ["DamagedHelmet", "ToyCar", "ABeautifulGame", "ChronographWatch", "CarConcept"]
-    
-    /// The array of properly formatted URLs derived from the Khronos Group GLB files
-    private static let khronosGLBURLs: [URL] = Self.khronosGLBFiles.compactMap { file in
-        URL(string: "\(Self.khronosBaseGLBURL)/\(file)/glTF-Binary/\(file).glb")
     }
 
-    /// Base path on which you can find several USDZ sample files from Apple
-    private static let appleBaseUSDZURL = "https://developer.apple.com/augmented-reality/quick-look/models"
-    
-    /// A list of files available on the Apple USDZ path
-    private static let appleUSDZFiles = ["teapot", ]
-
-    /// The array of properly formatted URLs derived from the Khronos Group GLB files
-    private static let appleUSDZURLs: [URL] = Self.appleUSDZFiles.compactMap { file in
-        URL(string: "\(Self.appleBaseUSDZURL)/\(file)/\(file).usdz")
+    private static var testURL: URL? {
+        guard let str = ProcessInfo.processInfo.environment["UITEST_URL"] else { return nil }
+        return URL(string: str)
     }
-    
-    private static let khronosBaseDAEURL = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels"
 
-    // https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/GearboxAssy/GearboxAssy.dae
-    
-    private static let khronosDAEFiles = ["GearboxAssy", "Duck"]
-
-    private static let khronosDAEURLs: [URL] = Self.khronosDAEFiles.compactMap { file in
-        URL(string: "\(Self.khronosBaseDAEURL)/\(file)/\(file).dae")
+    private static var testFormat: Format3D? {
+        guard let str = ProcessInfo.processInfo.environment["UITEST_FORMAT"] else { return nil }
+        return Format3D(rawValue: str)
     }
 }
 
@@ -110,35 +69,30 @@ struct RealityViewFromRemote: View {
     let url: URL
     let targetFormat: Format3D
     let forceConversion: Bool
-    
+
     @State private var camera = PerspectiveCamera()
     @State private var error: (any Error)?
-    
+
     var body: some View {
         RealityView { content in
             do {
                 var entity = try await Entity.from3DAsset(url: url)
-                
-                // Do a round trip to the target format
+
                 let ext = targetFormat.rawValue.lowercased()
                 if ext != url.pathExtension || forceConversion {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("TempAsset.\(ext)")
                     try await entity.write3DAsset(to: tempURL)
                     entity = try await Entity.from3DAsset(url: tempURL)
                 }
-            
-                // Sanitize the entire assembly tree, preserving all sub-parts
+
                 entity.sanitizeCameraComponents()
-                
-                // Re-center the assembly, and add it to the content
+
                 let bounds = entity.visualBounds(relativeTo: nil)
                 entity.position = -bounds.center
-                
-                // Position the camera dynamically based on the full assembly size
+
                 camera.position = 1.57 * bounds.extents
                 camera.look(at: .zero, from: bounds.extents, relativeTo: nil)
-                
-                // Add the assembly and camera to the content
+
                 content.add(entity)
                 content.add(camera)
             } catch {
@@ -150,7 +104,7 @@ struct RealityViewFromRemote: View {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .scaleEffect(1.5)
-                
+
                 Text("Loading 3D Asset...")
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -168,8 +122,9 @@ struct RealityViewFromRemote: View {
         .navigationSubtitle(subtitle)
 #endif
         .edgesIgnoringSafeArea(.all)
+        .accessibilityIdentifier("realityView")
     }
-    
+
     private var subtitle: String {
         let ext = targetFormat.rawValue.lowercased()
         if ext != url.pathExtension { return "Converted to \(targetFormat.rawValue)" }
@@ -179,14 +134,10 @@ struct RealityViewFromRemote: View {
 }
 
 extension Entity {
-    
-    /// The ToyCar.glb model and others have camera components that block orbit camera gestures, this removes them recursively.
     func sanitizeCameraComponents() {
-        // Strip the blocking camera components
         if self.components.has(PerspectiveCameraComponent.self) {
             self.components.remove(PerspectiveCameraComponent.self)
         }
-        // Recursively subtract from all children down the assembly tree
         for child in children {
             child.sanitizeCameraComponents()
         }

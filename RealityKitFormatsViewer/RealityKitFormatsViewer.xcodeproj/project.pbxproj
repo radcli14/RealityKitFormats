@@ -10,14 +10,30 @@
 		8A4527B82FD84BAB000E2C1B /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A4527B72FD84BAB000E2C1B /* RealityKitFormats */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		8A4527C52FD84BAB000E2C1B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8A456ED82FC610BC00F9BD76 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A456EDF2FC610BC00F9BD76;
+			remoteInfo = RealityKitFormatsViewer;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RealityKitFormatsViewer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A4527C02FD84BAB000E2C1B /* RealityKitFormatsViewerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RealityKitFormatsViewerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8A456EE22FC610BC00F9BD76 /* RealityKitFormatsViewer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RealityKitFormatsViewer;
+			sourceTree = "<group>";
+		};
+		8A4527C72FD84BAB000E2C1B /* RealityKitFormatsViewerUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = RealityKitFormatsViewerUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -31,6 +47,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8A4527C22FD84BAB000E2C1B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -38,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				8A456EE22FC610BC00F9BD76 /* RealityKitFormatsViewer */,
+				8A4527C72FD84BAB000E2C1B /* RealityKitFormatsViewerUITests */,
 				8A456EE12FC610BC00F9BD76 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -46,6 +70,7 @@
 			isa = PBXGroup;
 			children = (
 				8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */,
+				8A4527C02FD84BAB000E2C1B /* RealityKitFormatsViewerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,6 +78,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		8A4527C42FD84BAB000E2C1B /* RealityKitFormatsViewerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A4527CA2FD84BAB000E2C1B /* Build configuration list for PBXNativeTarget "RealityKitFormatsViewerUITests" */;
+			buildPhases = (
+				8A4527C12FD84BAB000E2C1B /* Sources */,
+				8A4527C22FD84BAB000E2C1B /* Frameworks */,
+				8A4527C32FD84BAB000E2C1B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8A4527C62FD84BAB000E2C1B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8A4527C72FD84BAB000E2C1B /* RealityKitFormatsViewerUITests */,
+			);
+			name = RealityKitFormatsViewerUITests;
+			productName = RealityKitFormatsViewerUITests;
+			productReference = 8A4527C02FD84BAB000E2C1B /* RealityKitFormatsViewerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		8A456EDF2FC610BC00F9BD76 /* RealityKitFormatsViewer */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 8A456EEB2FC610BE00F9BD76 /* Build configuration list for PBXNativeTarget "RealityKitFormatsViewer" */;
@@ -89,6 +135,10 @@
 					8A456EDF2FC610BC00F9BD76 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					8A4527C42FD84BAB000E2C1B = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 8A456EDF2FC610BC00F9BD76;
+					};
 				};
 			};
 			buildConfigurationList = 8A456EDB2FC610BC00F9BD76 /* Build configuration list for PBXProject "RealityKitFormatsViewer" */;
@@ -109,12 +159,20 @@
 			projectRoot = "";
 			targets = (
 				8A456EDF2FC610BC00F9BD76 /* RealityKitFormatsViewer */,
+				8A4527C42FD84BAB000E2C1B /* RealityKitFormatsViewerUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		8A456EDE2FC610BC00F9BD76 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A4527C32FD84BAB000E2C1B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -131,7 +189,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8A4527C12FD84BAB000E2C1B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8A4527C62FD84BAB000E2C1B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A456EDF2FC610BC00F9BD76 /* RealityKitFormatsViewer */;
+			targetProxy = 8A4527C52FD84BAB000E2C1B /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		8A456EE92FC610BE00F9BD76 /* Debug */ = {
@@ -338,6 +411,48 @@
 			};
 			name = Release;
 		};
+		8A4527C82FD84BAB000E2C1B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 59VPT4KMHW;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.dc-engineer.RealityKitFormatsViewerUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RealityKitFormatsViewer;
+			};
+			name = Debug;
+		};
+		8A4527C92FD84BAB000E2C1B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 59VPT4KMHW;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.dc-engineer.RealityKitFormatsViewerUITests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = RealityKitFormatsViewer;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -355,6 +470,15 @@
 			buildConfigurations = (
 				8A456EEC2FC610BE00F9BD76 /* Debug */,
 				8A456EED2FC610BE00F9BD76 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8A4527CA2FD84BAB000E2C1B /* Build configuration list for PBXNativeTarget "RealityKitFormatsViewerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A4527C82FD84BAB000E2C1B /* Debug */,
+				8A4527C92FD84BAB000E2C1B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

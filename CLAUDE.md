@@ -20,3 +20,9 @@ Syntax should stay mostly the same between different formats, as the purpose of 
 Because these are legacy `XML` formats that reference 3D files, the app needs to support older 3D formats, specifically `DAE`, `STL`, and `OBJ`, that are standardized in `URDF` and `MJCF`, even if though they don't see wide use in modern web or AR applications.
 `GLB` and `USDZ` should be supported because the *are* modern formats, common in web and AR, but are not common in robotics.
 Apple's ModelIO supports a few other formats, but they aren't important to the `ARMOR` app.
+
+## RealityKitFormatsViewer
+
+This is a Mini UI-test app intended to visually verify imports and conversions by a human user.
+The navigation bar includes a button to select a 3D model file, and a second button to select the display format.
+The loaded entity is displayed in the center of the screen.
