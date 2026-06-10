@@ -211,6 +211,7 @@ private func meanChannel(_ bytes: [UInt8], channel: Int) -> Float {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "USDZ file should exist after write")
+    printSizeScorecard(label: "DamagedHelmet GLB → USDZ", sourceBytes: data.count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -228,6 +229,77 @@ private func meanChannel(_ bytes: [UInt8], channel: Int) -> Float {
             "Normal map assignment should survive USDZ round-trip")
 
     try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet USDZ round-trip")
+}
+
+@Test @MainActor func testRoundTripDamagedHelmetToDAE() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let source = try await Entity.from3DAsset(data: data, format: "glb")
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+
+    try await source.write3DAsset(to: outURL)
+    #expect(FileManager.default.fileExists(atPath: outURL.path), "DAE file should exist after write")
+    printSizeScorecard(label: "DamagedHelmet GLB → DAE", sourceBytes: data.count, exportedURL: outURL)
+
+    let loaded = try await Entity.from3DAsset(url: outURL)
+
+    let srcMesh = try #require(meshSpec(from: source), "Source helmet should have geometry")
+    let ldMesh  = try #require(meshSpec(from: loaded),  "Re-loaded helmet should have geometry")
+    // DAE de-interleaves shared vertices at UV seams, so vertex count can increase.
+    #expect(ldMesh.vertexCount >= srcMesh.vertexCount)
+    #expect(ldMesh.indexCount == srcMesh.indexCount)
+
+    let ldMat = try #require(materialSpec(from: loaded), "Re-loaded helmet should have a PBR material")
+    #expect(ldMat.hasBaseColorTexture,
+            "Base color texture should survive GLB→DAE round-trip (data URI decode)")
+
+    try expectBoundsPreserved(source: source, loaded: loaded, label: "DamagedHelmet→DAE")
+    try expectOrientationPreserved(source: source, loaded: loaded, label: "DamagedHelmet→DAE")
+}
+
+/// Verifies pixel content of the base color texture after a GLB → DAE → entity round-trip.
+/// Tolerance is 20 (vs 10 for GLB→GLB) to account for JPEG compression in the embedded data URI.
+@Test @MainActor func testRoundTripDamagedHelmetToDAEBaseColorTexture() async throws {
+    let data = try await AssetCache.shared.helmetData()
+    let source = try await Entity.from3DAsset(data: data, format: "glb")
+
+    guard let srcComp = firstModelComponent(in: source),
+          let srcPBR  = srcComp.materials.first as? PhysicallyBasedMaterial,
+          let srcBC   = srcPBR.baseColor.texture?.resource,
+          let srcBytes = readTextureBytes(srcBC) else {
+        Issue.record("Could not read source base color texture")
+        return
+    }
+
+    let outURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString).appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: outURL) }
+    try await source.write3DAsset(to: outURL)
+    printSizeScorecard(label: "DamagedHelmet GLB → DAE", sourceBytes: data.count, exportedURL: outURL)
+    let loaded = try await Entity.from3DAsset(url: outURL)
+
+    guard let ldComp = firstModelComponent(in: loaded),
+          let ldPBR  = ldComp.materials.first as? PhysicallyBasedMaterial,
+          let ldBC   = ldPBR.baseColor.texture?.resource,
+          let ldBytes = readTextureBytes(ldBC) else {
+        Issue.record("Could not read loaded DAE base color texture — data URI decode may have failed")
+        return
+    }
+
+    let srcR = meanChannel(srcBytes, channel: 0)
+    let srcG = meanChannel(srcBytes, channel: 1)
+    let srcB = meanChannel(srcBytes, channel: 2)
+    let ldR  = meanChannel(ldBytes,  channel: 0)
+    let ldG  = meanChannel(ldBytes,  channel: 1)
+    let ldB  = meanChannel(ldBytes,  channel: 2)
+
+    // Tolerance of 20 (vs 10 for GLB→GLB) accommodates JPEG compression in the data URI.
+    #expect(abs(ldR - srcR) < 20, "Base color mean R after DAE round-trip: src=\(srcR), loaded=\(ldR)")
+    #expect(abs(ldG - srcG) < 20, "Base color mean G after DAE round-trip: src=\(srcG), loaded=\(ldG)")
+    #expect(abs(ldB - srcB) < 20, "Base color mean B after DAE round-trip: src=\(srcB), loaded=\(ldB)")
 }
 
 // MARK: - Unified Loader Tests
@@ -489,6 +561,15 @@ private func expectBoundsPreserved(source: Entity, loaded: Entity, label: String
             "Bounding box scale not preserved within 1%\(suffix): source diagonal \(ref), loaded \(ld.diagonalLength)")
 }
 
+/// Prints a size scorecard comparing the source format's byte count to the exported file.
+/// Not enforced as an assertion — informational only, to surface format-induced bloat over time.
+private func printSizeScorecard(label: String, sourceBytes: Int, exportedURL: URL) {
+    let exportedBytes = (try? FileManager.default.attributesOfItem(atPath: exportedURL.path)[.size] as? Int) ?? 0
+    let ratio = sourceBytes > 0 ? Double(exportedBytes) / Double(sourceBytes) : 0
+    func fmt(_ n: Int) -> String { ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) }
+    print("[SizeScorecard] \(label): \(fmt(sourceBytes)) → \(fmt(exportedBytes)) (\(String(format: "%.2f", ratio))×)")
+}
+
 /// Returns a Khronos Box entity loaded from the cached GLB bytes.
 private func loadBoxEntity() async throws -> Entity {
     let data = try await AssetCache.shared.glbData()
@@ -513,6 +594,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "GLB file should exist after write")
+    printSizeScorecard(label: "Box GLB → GLB", sourceBytes: try await AssetCache.shared.glbData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     #expect(loaded.children.count == sourceChildrenCountHierarchy)
@@ -564,6 +646,7 @@ private func loadTeapotEntity() async throws -> Entity {
         .appendingPathComponent(UUID().uuidString).appendingPathExtension("glb")
     defer { try? FileManager.default.removeItem(at: outURL) }
     try await source.write3DAsset(to: outURL)
+    printSizeScorecard(label: "DamagedHelmet GLB → GLB", sourceBytes: data.count, exportedURL: outURL)
     let loaded = try await Entity.from3DAsset(url: outURL)
 
     guard let ldComp = firstModelComponent(in: loaded),
@@ -597,6 +680,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "GLB file should exist after write")
+    printSizeScorecard(label: "DamagedHelmet GLB → GLB", sourceBytes: data.count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -642,6 +726,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "USDZ file should exist after write")
+    printSizeScorecard(label: "Box GLB → USDZ", sourceBytes: try await AssetCache.shared.glbData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -668,6 +753,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "OBJ file should exist after write")
+    printSizeScorecard(label: "Box GLB → OBJ", sourceBytes: try await AssetCache.shared.glbData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -707,6 +793,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "DAE file should exist after write")
+    printSizeScorecard(label: "Box GLB → DAE", sourceBytes: try await AssetCache.shared.glbData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -733,6 +820,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "STL file should exist after write")
+    printSizeScorecard(label: "Box GLB → STL", sourceBytes: try await AssetCache.shared.glbData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
 
@@ -777,6 +865,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "OBJ file should exist after write")
+    printSizeScorecard(label: "Teapot USDZ → OBJ", sourceBytes: try await AssetCache.shared.usdzData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded OBJ should contain geometry")
@@ -797,6 +886,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "STL file should exist after write")
+    printSizeScorecard(label: "Teapot USDZ → STL", sourceBytes: try await AssetCache.shared.usdzData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded STL should contain geometry")
@@ -819,6 +909,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "PLY file should exist after write")
+    printSizeScorecard(label: "Teapot USDZ → PLY", sourceBytes: try await AssetCache.shared.usdzData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded PLY should contain geometry")
@@ -839,6 +930,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "ABC file should exist after write")
+    printSizeScorecard(label: "Teapot USDZ → ABC", sourceBytes: try await AssetCache.shared.usdzData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded ABC should contain geometry")
@@ -860,6 +952,7 @@ private func loadTeapotEntity() async throws -> Entity {
 
     try await source.write3DAsset(to: outURL)
     #expect(FileManager.default.fileExists(atPath: outURL.path), "DAE file should exist after write")
+    printSizeScorecard(label: "Teapot USDZ → DAE", sourceBytes: try await AssetCache.shared.usdzData().count, exportedURL: outURL)
 
     let loaded = try await Entity.from3DAsset(url: outURL)
     let mesh = try #require(meshSpec(from: loaded), "Loaded DAE should contain geometry")
