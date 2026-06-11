@@ -17,40 +17,50 @@ struct ContentView: View {
     @State private var showFormatPicker = false
 
     var body: some View {
-        NavigationStack {
-            RealityViewFromRemote(url: url, targetFormat: targetFormat, forceConversion: forceConversion)
-                .id(url.absoluteString + targetFormat.rawValue + (forceConversion ? "1" : "0"))
-                .toolbar {
-                    ToolbarItemGroup {
-                        Menu {
-                            Picker("Select Model", selection: $url) {
-                                ForEach(URLOptions.allURLs, id: \.self) { assetURL in
-                                    Text(assetURL.lastPathComponent).tag(assetURL)
+        if Self.hideChrome {
+            // Screenshot mode: render RealityViewFromRemote at exactly 256×256, like a preview,
+            // so the screenshot is device-independent.
+            ZStack {
+                Color.black.ignoresSafeArea()
+                RealityViewFromRemote(url: url, targetFormat: targetFormat, forceConversion: forceConversion)
+                    .frame(width: 256, height: 256)
+            }
+        } else {
+            NavigationStack {
+                RealityViewFromRemote(url: url, targetFormat: targetFormat, forceConversion: forceConversion)
+                    .id(url.absoluteString + targetFormat.rawValue + (forceConversion ? "1" : "0"))
+                    .toolbar {
+                        ToolbarItemGroup {
+                            Menu {
+                                Picker("Select Model", selection: $url) {
+                                    ForEach(URLOptions.allURLs, id: \.self) { assetURL in
+                                        Text(assetURL.lastPathComponent).tag(assetURL)
+                                    }
                                 }
+                            } label: {
+                                Label("Select Model", systemImage: "cube.transparent")
                             }
-                        } label: {
-                            Label("Select Model", systemImage: "cube.transparent")
                         }
-                    }
-                    ToolbarItemGroup(placement: topBarPlacement) {
-                        Menu {
-                            Picker("Target Format", selection: $targetFormat) {
-                                ForEach(Format3D.allCases, id: \.self) { format in
-                                    Text(format.rawValue).tag(format)
+                        ToolbarItemGroup(placement: topBarPlacement) {
+                            Menu {
+                                Picker("Target Format", selection: $targetFormat) {
+                                    ForEach(Format3D.allCases, id: \.self) { format in
+                                        Text(format.rawValue).tag(format)
+                                    }
                                 }
+                            } label: {
+                                Label(targetFormat.rawValue, systemImage: "arrow.triangle.2.circlepath")
                             }
-                        } label: {
-                            Label(targetFormat.rawValue, systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        ToolbarItemGroup(placement: bottomBarPlacement) {
+                            Picker("Load Mode", selection: $forceConversion) {
+                                Text("Direct").tag(false)
+                                Text("Round-trip").tag(true)
+                            }
+                            .pickerStyle(.segmented)
                         }
                     }
-                    ToolbarItemGroup(placement: bottomBarPlacement) {
-                        Picker("Load Mode", selection: $forceConversion) {
-                            Text("Direct").tag(false)
-                            Text("Round-trip").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                    }
-                }
+            }
         }
     }
 
@@ -70,6 +80,10 @@ struct ContentView: View {
 #endif
     }
     
+    private static var hideChrome: Bool {
+        ProcessInfo.processInfo.environment["UITEST_HIDE_CHROME"] == "true"
+    }
+
     private static var testURL: URL? {
         guard let str = ProcessInfo.processInfo.environment["UITEST_URL"] else { return nil }
         return URL(string: str)
@@ -88,6 +102,7 @@ struct RealityViewFromRemote: View {
 
     @State private var camera = PerspectiveCamera()
     @State private var error: (any Error)?
+    @State private var loadState: LoadState = .loading
 
     var body: some View {
         RealityView { content in
@@ -98,7 +113,11 @@ struct RealityViewFromRemote: View {
                 if ext != url.pathExtension || forceConversion {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("TempAsset.\(ext)")
                     try await entity.write3DAsset(to: tempURL)
+                    let size = (try? FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+                    await MainActor.run { self.loadState = .ready(fileSize: size) }
                     entity = try await Entity.from3DAsset(url: tempURL)
+                } else {
+                    await MainActor.run { self.loadState = .ready(fileSize: 0) }
                 }
 
                 entity.sanitizeCameraComponents()
@@ -113,6 +132,7 @@ struct RealityViewFromRemote: View {
                 content.add(camera)
             } catch {
                 self.error = error
+                await MainActor.run { self.loadState = .error }
                 print("Failed to load \(url), \(error.localizedDescription)")
             }
         } placeholder: {
@@ -139,6 +159,7 @@ struct RealityViewFromRemote: View {
 #endif
         .edgesIgnoringSafeArea(.all)
         .accessibilityIdentifier("realityView")
+        .accessibilityValue(loadState.accessibilityString)
     }
 
     private var subtitle: String {
@@ -146,6 +167,20 @@ struct RealityViewFromRemote: View {
         if ext != url.pathExtension { return "Converted to \(targetFormat.rawValue)" }
         if forceConversion { return "Round-tripped as \(targetFormat.rawValue)" }
         return "Original"
+    }
+}
+
+private enum LoadState {
+    case loading
+    case ready(fileSize: Int64)
+    case error
+
+    var accessibilityString: String {
+        switch self {
+        case .loading:           return "loading"
+        case .ready(let size):   return "ready:\(size)"
+        case .error:             return "error"
+        }
     }
 }
 
