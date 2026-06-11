@@ -6,11 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		8A806B262FDB13DE0024ED79 /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A806B252FDB13DE0024ED79 /* RealityKitFormats */; };
-		8A806B292FDB13EC0024ED79 /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A806B282FDB13EC0024ED79 /* RealityKitFormats */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		8A4527C52FD84BAB000E2C1B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -45,7 +40,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A806B292FDB13EC0024ED79 /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,7 +47,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8A806B262FDB13DE0024ED79 /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -128,7 +121,6 @@
 			);
 			name = RealityKitFormatsViewer;
 			packageProductDependencies = (
-				8A806B252FDB13DE0024ED79 /* RealityKitFormats */,
 			);
 			productName = RealityKitFormatsViewer;
 			productReference = 8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */;
@@ -163,7 +155,6 @@
 			mainGroup = 8A456ED72FC610BC00F9BD76;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8A806B242FDB13DE0024ED79 /* XCLocalSwiftPackageReference "../../RealityKitFormats" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8A456EE12FC610BC00F9BD76 /* Products */;
@@ -498,25 +489,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		8A806B242FDB13DE0024ED79 /* XCLocalSwiftPackageReference "../../RealityKitFormats" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../../RealityKitFormats;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		8A806B252FDB13DE0024ED79 /* RealityKitFormats */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = RealityKitFormats;
-		};
-		8A806B282FDB13EC0024ED79 /* RealityKitFormats */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8A806B242FDB13DE0024ED79 /* XCLocalSwiftPackageReference "../../RealityKitFormats" */;
-			productName = RealityKitFormats;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8A456ED82FC610BC00F9BD76 /* Project object */;
 }
