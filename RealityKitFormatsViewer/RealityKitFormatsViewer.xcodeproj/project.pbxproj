@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8A4933932FDB1AD40071E9D4 /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A4933922FDB1AD40071E9D4 /* RealityKitFormats */; };
+		8A4933952FDB1AE30071E9D4 /* RealityKitFormats in Frameworks */ = {isa = PBXBuildFile; productRef = 8A4933942FDB1AE30071E9D4 /* RealityKitFormats */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		8A4527C52FD84BAB000E2C1B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -40,6 +45,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8A4933952FDB1AE30071E9D4 /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,6 +53,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8A4933932FDB1AD40071E9D4 /* RealityKitFormats in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +128,7 @@
 			);
 			name = RealityKitFormatsViewer;
 			packageProductDependencies = (
+				8A4933922FDB1AD40071E9D4 /* RealityKitFormats */,
 			);
 			productName = RealityKitFormatsViewer;
 			productReference = 8A456EE02FC610BC00F9BD76 /* RealityKitFormatsViewer.app */;
@@ -489,6 +497,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8A4933922FDB1AD40071E9D4 /* RealityKitFormats */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RealityKitFormats;
+		};
+		8A4933942FDB1AE30071E9D4 /* RealityKitFormats */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RealityKitFormats;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8A456ED82FC610BC00F9BD76 /* Project object */;
 }

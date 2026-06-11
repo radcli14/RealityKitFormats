@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <Group
+      location = "group:RealityKitFormatsViewer"
+      name = "RealityKitFormatsViewer">
+      <FileRef
+         location = "group:RealityKitFormatsViewer.xctestplan">
+      </FileRef>
+      <Group
+         location = "group:RealityKitFormatsViewer"
+         name = "RealityKitFormatsViewer">
+         <FileRef
+            location = "group:RealityKitFormatsViewerApp.swift">
+         </FileRef>
+         <FileRef
+            location = "group:RealityKitFormatsViewer.entitlements">
+         </FileRef>
+         <FileRef
+            location = "group:Assets.xcassets">
+         </FileRef>
+         <FileRef
+            location = "group:URLOptions.swift">
+         </FileRef>
+         <FileRef
+            location = "group:left_hand.usdz">
+         </FileRef>
+         <FileRef
+            location = "group:ContentView.swift">
+         </FileRef>
+      </Group>
+      <Group
+         location = "group:RealityKitFormatsViewerUITests"
+         name = "RealityKitFormatsViewerUITests">
+         <FileRef
+            location = "group:ScreenshotTests.swift">
+         </FileRef>
+      </Group>
+      <FileRef
+         location = "group:RealityKitFormatsViewer.xcodeproj">
+      </FileRef>
+   </Group>
+   <FileRef
+      location = "group:RealityKitFormats">
+   </FileRef>
+</Workspace>

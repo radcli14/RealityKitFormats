@@ -1,0 +1,42 @@
+{
+  "originHash" : "2649f67ee1ffd8d89170e0ce02efdbf35f60af2e815a0d67d98d91cb5b495cce",
+  "pins" : [
+    {
+      "identity" : "dae-to-realitykit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/radcli14/DAE-to-RealityKit",
+      "state" : {
+        "revision" : "2286a670310149df8637c0774ebf62432a7786df",
+        "version" : "0.6.16"
+      }
+    },
+    {
+      "identity" : "gltfkit2",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/radcli14/GLTFKit2",
+      "state" : {
+        "revision" : "704b47d4012694684b06517f84133e189d752b79",
+        "version" : "0.6.6"
+      }
+    },
+    {
+      "identity" : "modelio-to-realitykit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/radcli14/ModelIO-to-RealityKit",
+      "state" : {
+        "revision" : "b9d21c602e72abc07b33f1be07dd65e9d25b6f29",
+        "version" : "0.6.16"
+      }
+    },
+    {
+      "identity" : "xmlcoder",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/CoreOffice/XMLCoder.git",
+      "state" : {
+        "revision" : "42f62383dbcd074440cb1f6a750b9c02df9e7325",
+        "version" : "0.18.2"
+      }
+    }
+  ],
+  "version" : 3
+}
