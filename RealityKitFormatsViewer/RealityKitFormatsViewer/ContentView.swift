@@ -32,7 +32,7 @@ struct ContentView: View {
                             Label("Select Model", systemImage: "cube.transparent")
                         }
                     }
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: topBarPlacement) {
                         Menu {
                             Picker("Target Format", selection: $targetFormat) {
                                 ForEach(Format3D.allCases, id: \.self) { format in
@@ -43,7 +43,7 @@ struct ContentView: View {
                             Label(targetFormat.rawValue, systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
-                    ToolbarItemGroup(placement: .bottomBar) {
+                    ToolbarItemGroup(placement: bottomBarPlacement) {
                         Picker("Load Mode", selection: $forceConversion) {
                             Text("Direct").tag(false)
                             Text("Round-trip").tag(true)
@@ -54,6 +54,22 @@ struct ContentView: View {
         }
     }
 
+    private var topBarPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .topBarTrailing
+#else
+        .automatic
+#endif
+    }
+    
+    private var bottomBarPlacement: ToolbarItemPlacement {
+#if os(iOS)
+        .bottomBar
+#else
+        .automatic
+#endif
+    }
+    
     private static var testURL: URL? {
         guard let str = ProcessInfo.processInfo.environment["UITEST_URL"] else { return nil }
         return URL(string: str)

@@ -1,0 +1,30 @@
+{
+  "configurations" : [
+    {
+      "id" : "90E9F29D-5146-49A5-9240-F0BEDB6CD885",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false,
+    "performanceAntipatternCheckerEnabled" : true,
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:RealityKitFormatsViewer.xcodeproj",
+      "identifier" : "8A456EDF2FC610BC00F9BD76",
+      "name" : "RealityKitFormatsViewer"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:RealityKitFormatsViewer.xcodeproj",
+        "identifier" : "8A4527C42FD84BAB000E2C1B",
+        "name" : "RealityKitFormatsViewerUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

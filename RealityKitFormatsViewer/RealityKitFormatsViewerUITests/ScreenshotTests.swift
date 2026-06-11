@@ -38,9 +38,12 @@ final class ScreenshotTests: XCTestCase {
 
     // MARK: - Output directory
 
+    // On iOS simulator, files land in the app's sandbox Documents folder.
+    // Access them via Xcode → Window → Devices & Simulators → Download Container,
+    // or use the XCTAttachment in the test report (the primary output).
     private static let screenshotDir: URL = {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Documents/RealityKitFormatsScreenshots")
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("RealityKitFormatsScreenshots")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
