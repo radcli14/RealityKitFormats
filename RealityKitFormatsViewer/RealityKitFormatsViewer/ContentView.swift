@@ -71,7 +71,7 @@ struct ContentView: View {
         .automatic
 #endif
     }
-    
+
     private var bottomBarPlacement: ToolbarItemPlacement {
 #if os(iOS)
         .bottomBar
@@ -79,7 +79,7 @@ struct ContentView: View {
         .automatic
 #endif
     }
-    
+
     private static var hideChrome: Bool {
         ProcessInfo.processInfo.environment["UITEST_HIDE_CHROME"] == "true"
     }
