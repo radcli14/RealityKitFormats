@@ -19,9 +19,9 @@ final class ScorecardGenerator {
     private init() {
         arView = ARView(frame: CGRect(x: 0, y: 0, width: 256, height: 256))
         arView.environment.background = .color(.white)
+        #if os(iOS)
         arView.renderOptions = [.disableMotionBlur, .disableDepthOfField,
                                 .disableHDR, .disableGroundingShadows]
-        #if os(iOS)
         arView.cameraMode = .nonAR
         #endif
 
