@@ -8,12 +8,15 @@ import UIKit
 #endif
 
 /// Owns a single off-screen ARView and renders entities into 256×256 PNG snapshots.
-/// All methods are MainActor-isolated because ARView requires the main thread.
+/// Camera framing matches RealityKitFormatsViewer: entity centered at origin, camera
+/// placed at bounds.extents looking toward zero — no entity rescaling.
 @MainActor
 final class ScorecardGenerator {
     static let shared = ScorecardGenerator()
 
     private let arView: ARView
+    private let camera: PerspectiveCamera
+    private let cameraAnchor: AnchorEntity
     private var entityAnchor: AnchorEntity?
 
     private init() {
@@ -35,14 +38,10 @@ final class ScorecardGenerator {
         lightAnchor.addChild(lightEntity)
         arView.scene.addAnchor(lightAnchor)
 
-        // Fixed perspective camera
-        let cameraEntity = Entity()
-        var camera = PerspectiveCameraComponent()
-        camera.fieldOfViewInDegrees = 30
-        cameraEntity.components.set(camera)
-        cameraEntity.look(at: .zero, from: [0, 0.5, 1.5], relativeTo: nil)
-        let cameraAnchor = AnchorEntity()
-        cameraAnchor.addChild(cameraEntity)
+        // Camera — transform is updated per-entity in render()
+        camera = PerspectiveCamera()
+        cameraAnchor = AnchorEntity()
+        cameraAnchor.addChild(camera)
         arView.scene.addAnchor(cameraAnchor)
     }
 
@@ -52,13 +51,17 @@ final class ScorecardGenerator {
         entityAnchor?.removeFromParent()
         entityAnchor = nil
 
-        // Center and normalize scale so every model fills the frame
+        // Remove any camera entities baked into the asset so our camera controls the view
+        entity.sanitizeCameraComponents()
+
+        // Center entity and position camera from bounds extents — mirrors viewer logic
         let bounds = entity.visualBounds(relativeTo: nil)
         entity.position = -bounds.center
-        let maxExtent = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
-        if maxExtent > 0.001 {
-            entity.scale = SIMD3(repeating: 0.5 / maxExtent)
-        }
+        let extents = bounds.extents
+        let cameraFrom: SIMD3<Float> = (extents.x < 0.001 && extents.y < 0.001 && extents.z < 0.001)
+            ? [0.5, 0.5, 0.5]
+            : extents
+        camera.look(at: .zero, from: cameraFrom, relativeTo: nil)
 
         let anchor = AnchorEntity()
         anchor.addChild(entity)
@@ -66,7 +69,7 @@ final class ScorecardGenerator {
         entityAnchor = anchor
 
         // Allow the RealityKit render loop to tick and textures to stream in
-        try? await Task.sleep(for: .milliseconds(1000))
+        try? await Task.sleep(for: .milliseconds(2000))
 
         return await withCheckedContinuation { continuation in
             arView.snapshot(saveToHDR: false) { image in
@@ -75,14 +78,40 @@ final class ScorecardGenerator {
                     return
                 }
                 #if canImport(UIKit)
-                continuation.resume(returning: image.pngData())
-                #else
-                let data = image.tiffRepresentation.flatMap {
-                    NSBitmapImageRep(data: $0)?.representation(using: .png, properties: [:])
+                // Force 1:1 pixel scale so output is exactly 256×256 on Retina devices
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1.0
+                let renderer = UIGraphicsImageRenderer(
+                    size: CGSize(width: 256, height: 256), format: format)
+                let scaled = renderer.image { _ in
+                    image.draw(in: CGRect(x: 0, y: 0, width: 256, height: 256))
                 }
-                continuation.resume(returning: data)
+                continuation.resume(returning: scaled.pngData())
+                #else
+                // Scale to exactly 256×256 pixels (Retina displays render at 2× by default)
+                guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
+                    pixelsWide: 256, pixelsHigh: 256,
+                    bitsPerSample: 8, samplesPerPixel: 4,
+                    hasAlpha: true, isPlanar: false,
+                    colorSpaceName: .calibratedRGB,
+                    bytesPerRow: 0, bitsPerPixel: 0) else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                NSGraphicsContext.saveGraphicsState()
+                NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+                image.draw(in: NSRect(x: 0, y: 0, width: 256, height: 256))
+                NSGraphicsContext.restoreGraphicsState()
+                continuation.resume(returning: rep.representation(using: .png, properties: [:]))
                 #endif
             }
         }
+    }
+}
+
+private extension Entity {
+    func sanitizeCameraComponents() {
+        components.remove(PerspectiveCameraComponent.self)
+        for child in children { child.sanitizeCameraComponents() }
     }
 }

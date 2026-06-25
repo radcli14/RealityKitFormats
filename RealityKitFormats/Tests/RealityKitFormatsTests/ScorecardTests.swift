@@ -25,8 +25,8 @@ struct ScorecardTests {
     }()
 
     // Minimum PNG size in bytes that constitutes a non-blank render.
-    // A 256×256 solid-white PNG compresses to ~400 bytes; real scene renders are much larger.
-    private static let blankThreshold = 2_048
+    // A 256×256 solid-white PNG compresses to ~200 bytes; real scene renders are typically 10 KB+.
+    private static let blankThreshold = 5_000
 
     // All export formats exercised in the conversion suite.
     private static let exportFormats = ["glb", "usdz", "dae", "obj", "stl"]
