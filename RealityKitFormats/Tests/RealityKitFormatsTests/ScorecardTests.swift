@@ -5,10 +5,10 @@ import RealityKit
 
 // MARK: - Scorecard Suite
 
-/// Renders every asset from AssetManifest into a 256×256 PNG thumbnail and writes
-/// Tests/Scorecard/<name>.png plus a scorecard.md summary table.
-///
-/// Run with: swift test --filter ScorecardTests
+/// Renders every asset from AssetManifest into 256×256 PNG thumbnails and writes
+/// Tests/Scorecard/<name>_<src>_original.png (raw load) and
+/// Tests/Scorecard/<name>_<src>_<target>.png (round-trip conversions),
+/// plus a scorecard.md summary table.
 ///
 /// Tests are serialized so thumbnails are fully written before scorecard.md is generated.
 @Suite("Scorecard", .serialized)
@@ -28,11 +28,27 @@ struct ScorecardTests {
     // A 256×256 solid-white PNG compresses to ~400 bytes; real scene renders are much larger.
     private static let blankThreshold = 2_048
 
-    // MARK: Render
+    // All export formats exercised in the conversion suite.
+    private static let exportFormats = ["glb", "usdz", "dae", "obj", "stl"]
+
+    // MARK: Conversion Case
+
+    struct ConversionCase: CustomStringConvertible, Sendable {
+        let asset: AssetManifest.Asset
+        let targetFormat: String
+
+        var description: String { "\(asset.name)_\(asset.format)_\(targetFormat)" }
+    }
+
+    static let allConversions: [ConversionCase] = AssetManifest.allAssets.flatMap { asset in
+        exportFormats.map { ConversionCase(asset: asset, targetFormat: $0) }
+    }
+
+    // MARK: Render Original
 
     @MainActor
-    @Test("Render thumbnail", arguments: AssetManifest.allAssets)
-    func renderThumbnail(asset: AssetManifest.Asset) async throws {
+    @Test("Render original", arguments: AssetManifest.allAssets)
+    func renderOriginal(asset: AssetManifest.Asset) async throws {
         let entity = try await Entity.from3DAsset(url: asset.url)
 
         guard let data = await ScorecardGenerator.shared.render(entity: entity) else {
@@ -45,7 +61,34 @@ struct ScorecardTests {
             "Thumbnail for \(asset.name) appears blank (\(data.count) bytes < \(Self.blankThreshold))"
         )
 
-        let pngURL = Self.scorecardDir.appendingPathComponent("\(asset.name)_\(asset.format).png")
+        let pngURL = Self.scorecardDir.appendingPathComponent("\(asset.name)_\(asset.format)_original.png")
+        try data.write(to: pngURL)
+    }
+
+    // MARK: Render Conversion
+
+    @MainActor
+    @Test("Render conversion", arguments: allConversions)
+    func renderConversion(conversion: ConversionCase) async throws {
+        let entity = try await Entity.from3DAsset(url: conversion.asset.url)
+
+        let tmpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(conversion.asset.name).\(conversion.targetFormat)")
+        try await entity.write3DAsset(to: tmpURL)
+
+        let converted = try await Entity.from3DAsset(url: tmpURL)
+
+        guard let data = await ScorecardGenerator.shared.render(entity: converted) else {
+            Issue.record("ARView snapshot unavailable for \(conversion.description) — Metal may not be accessible")
+            return
+        }
+
+        #expect(
+            data.count > Self.blankThreshold,
+            "Thumbnail for \(conversion.description) appears blank (\(data.count) bytes < \(Self.blankThreshold))"
+        )
+
+        let pngURL = Self.scorecardDir.appendingPathComponent("\(conversion.description).png")
         try data.write(to: pngURL)
     }
 
@@ -58,27 +101,27 @@ struct ScorecardTests {
             at: dir, includingPropertiesForKeys: nil
         ).filter { $0.pathExtension == "png" }.sorted { $0.lastPathComponent < $1.lastPathComponent }) ?? []
 
-        let assetLookup = Dictionary(uniqueKeysWithValues: AssetManifest.allAssets.map { ($0.name, $0) })
-
         var lines = [
             "# RealityKitFormats Scorecard",
             "",
-            "| Model | Format | Thumbnail |",
-            "|-------|--------|-----------|",
+            "| Model | Source | Target | Thumbnail |",
+            "|-------|--------|--------|-----------|",
         ]
         for png in pngs {
-            // Filename is "<name>_<format>.png" — split on last underscore to recover both parts.
+            // Filename is "<name>_<source>_<target>.png" — split from the right.
             let stem = png.deletingPathExtension().lastPathComponent
             let parts = stem.components(separatedBy: "_")
-            let format = parts.last?.uppercased() ?? "—"
-            let name = parts.dropLast().joined(separator: "_")
-            lines.append("| \(name) | \(format) | ![\(stem)](\(png.lastPathComponent)) |")
+            guard parts.count >= 3 else { continue }
+            let target = parts.last!.uppercased()
+            let source = parts[parts.count - 2].uppercased()
+            let name = parts.dropLast(2).joined(separator: "_")
+            lines.append("| \(name) | \(source) | \(target) | ![\(stem)](\(png.lastPathComponent)) |")
         }
 
         let markdown = lines.joined(separator: "\n") + "\n"
         let mdURL = dir.appendingPathComponent("scorecard.md")
         try markdown.write(to: mdURL, atomically: true, encoding: .utf8)
 
-        #expect(!pngs.isEmpty, "No thumbnails found — run Render thumbnail tests first")
+        #expect(!pngs.isEmpty, "No thumbnails found — run render tests first")
     }
 }

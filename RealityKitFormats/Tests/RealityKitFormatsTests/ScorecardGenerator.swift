@@ -37,7 +37,9 @@ final class ScorecardGenerator {
 
         // Fixed perspective camera
         let cameraEntity = Entity()
-        cameraEntity.components.set(PerspectiveCameraComponent())
+        var camera = PerspectiveCameraComponent()
+        camera.fieldOfViewInDegrees = 30
+        cameraEntity.components.set(camera)
         cameraEntity.look(at: .zero, from: [0, 0.5, 1.5], relativeTo: nil)
         let cameraAnchor = AnchorEntity()
         cameraAnchor.addChild(cameraEntity)
@@ -63,8 +65,8 @@ final class ScorecardGenerator {
         arView.scene.addAnchor(anchor)
         entityAnchor = anchor
 
-        // Allow the RealityKit render loop to tick
-        try? await Task.sleep(for: .milliseconds(300))
+        // Allow the RealityKit render loop to tick and textures to stream in
+        try? await Task.sleep(for: .milliseconds(1000))
 
         return await withCheckedContinuation { continuation in
             arView.snapshot(saveToHDR: false) { image in
