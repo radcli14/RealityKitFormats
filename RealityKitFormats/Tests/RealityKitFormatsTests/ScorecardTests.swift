@@ -45,7 +45,7 @@ struct ScorecardTests {
             "Thumbnail for \(asset.name) appears blank (\(data.count) bytes < \(Self.blankThreshold))"
         )
 
-        let pngURL = Self.scorecardDir.appendingPathComponent("\(asset.name).png")
+        let pngURL = Self.scorecardDir.appendingPathComponent("\(asset.name)_\(asset.format).png")
         try data.write(to: pngURL)
     }
 
@@ -67,9 +67,12 @@ struct ScorecardTests {
             "|-------|--------|-----------|",
         ]
         for png in pngs {
-            let name = png.deletingPathExtension().lastPathComponent
-            let format = assetLookup[name]?.format.uppercased() ?? "—"
-            lines.append("| \(name) | \(format) | ![\(name)](\(png.lastPathComponent)) |")
+            // Filename is "<name>_<format>.png" — split on last underscore to recover both parts.
+            let stem = png.deletingPathExtension().lastPathComponent
+            let parts = stem.components(separatedBy: "_")
+            let format = parts.last?.uppercased() ?? "—"
+            let name = parts.dropLast().joined(separator: "_")
+            lines.append("| \(name) | \(format) | ![\(stem)](\(png.lastPathComponent)) |")
         }
 
         let markdown = lines.joined(separator: "\n") + "\n"
