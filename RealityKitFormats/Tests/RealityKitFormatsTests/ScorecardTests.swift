@@ -28,7 +28,7 @@ struct ScorecardTests {
     // A 256×256 solid-white PNG compresses to ~200 bytes; real scene renders are typically 10 KB+.
     private static let blankThreshold = 5_000
 
-    // All export formats exercised in the conversion suite.
+    // Export formats — order is fixed and matches the scorecard column order.
     private static let exportFormats = ["glb", "usdz", "dae", "obj", "stl"]
 
     // MARK: Conversion Case
@@ -49,20 +49,25 @@ struct ScorecardTests {
     @MainActor
     @Test("Render original", arguments: AssetManifest.allAssets)
     func renderOriginal(asset: AssetManifest.Asset) async throws {
-        let entity = try await Entity.from3DAsset(url: asset.url)
+        // Download data directly so we can record the source file size
+        let (fileData, _) = try await URLSession.shared.data(from: asset.url)
+        let entity = try await Entity.from3DAsset(data: fileData, format: asset.format)
 
-        guard let data = await ScorecardGenerator.shared.render(entity: entity) else {
-            Issue.record("ARView snapshot unavailable for \(asset.name) — Metal may not be accessible in this environment")
+        guard let png = await ScorecardGenerator.shared.render(entity: entity) else {
+            Issue.record("ARView snapshot unavailable for \(asset.name) — Metal may not be accessible")
             return
         }
 
         #expect(
-            data.count > Self.blankThreshold,
-            "Thumbnail for \(asset.name) appears blank (\(data.count) bytes < \(Self.blankThreshold))"
+            png.count > Self.blankThreshold,
+            "Thumbnail for \(asset.name) appears blank (\(png.count) bytes < \(Self.blankThreshold))"
         )
 
-        let pngURL = Self.scorecardDir.appendingPathComponent("\(asset.name)_\(asset.format)_original.png")
-        try data.write(to: pngURL)
+        let stem = "\(asset.name)_\(asset.format)_original"
+        try png.write(to: Self.scorecardDir.appendingPathComponent("\(stem).png"))
+        try "\(fileData.count)".write(
+            to: Self.scorecardDir.appendingPathComponent("\(stem).size"),
+            atomically: true, encoding: .utf8)
     }
 
     // MARK: Render Conversion
@@ -75,21 +80,25 @@ struct ScorecardTests {
         let tmpURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(conversion.asset.name).\(conversion.targetFormat)")
         try await entity.write3DAsset(to: tmpURL)
+        let convertedSize = (try? FileManager.default.attributesOfItem(atPath: tmpURL.path)[.size] as? Int) ?? 0
 
         let converted = try await Entity.from3DAsset(url: tmpURL)
 
-        guard let data = await ScorecardGenerator.shared.render(entity: converted) else {
+        guard let png = await ScorecardGenerator.shared.render(entity: converted) else {
             Issue.record("ARView snapshot unavailable for \(conversion.description) — Metal may not be accessible")
             return
         }
 
         #expect(
-            data.count > Self.blankThreshold,
-            "Thumbnail for \(conversion.description) appears blank (\(data.count) bytes < \(Self.blankThreshold))"
+            png.count > Self.blankThreshold,
+            "Thumbnail for \(conversion.description) appears blank (\(png.count) bytes < \(Self.blankThreshold))"
         )
 
-        let pngURL = Self.scorecardDir.appendingPathComponent("\(conversion.description).png")
-        try data.write(to: pngURL)
+        let stem = conversion.description
+        try png.write(to: Self.scorecardDir.appendingPathComponent("\(stem).png"))
+        try "\(convertedSize)".write(
+            to: Self.scorecardDir.appendingPathComponent("\(stem).size"),
+            atomically: true, encoding: .utf8)
     }
 
     // MARK: Summary
@@ -97,31 +106,85 @@ struct ScorecardTests {
     @Test("Generate scorecard.md")
     func generateScorecard() throws {
         let dir = Self.scorecardDir
-        let pngs = (try? FileManager.default.contentsOfDirectory(
-            at: dir, includingPropertiesForKeys: nil
-        ).filter { $0.pathExtension == "png" }.sorted { $0.lastPathComponent < $1.lastPathComponent }) ?? []
+        let allFiles = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil)) ?? []
+        let pngs = allFiles
+            .filter { $0.pathExtension == "png" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        // Fixed column key order: original first, then each export format
+        let columnOrder = ["original"] + Self.exportFormats
+
+        struct Entry {
+            let stem: String
+            let filename: String
+            let size: String
+        }
+
+        // groups["DamagedHelmet_glb"]["usdz"] = Entry(...)
+        var groups: [String: [String: Entry]] = [:]
+        var groupOrder: [String] = []  // preserves first-seen order (alphabetical via sorted pngs)
+
+        for png in pngs {
+            let stem = png.deletingPathExtension().lastPathComponent
+            let parts = stem.components(separatedBy: "_")
+            guard parts.count >= 3 else { continue }
+            let target = parts.last!.lowercased()
+            let source = parts[parts.count - 2].lowercased()
+            let name = parts.dropLast(2).joined(separator: "_")
+            let groupKey = "\(name)_\(source)"
+
+            let sizeURL = dir.appendingPathComponent("\(stem).size")
+            let sizeStr = (try? String(contentsOf: sizeURL, encoding: .utf8))
+                .flatMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+                .map { formatFileSize($0) } ?? "—"
+
+            if groups[groupKey] == nil {
+                groups[groupKey] = [:]
+                groupOrder.append(groupKey)
+            }
+            groups[groupKey]![target] = Entry(stem: stem, filename: png.lastPathComponent, size: sizeStr)
+        }
 
         var lines = [
             "# RealityKitFormats Scorecard",
             "",
-            "| Model | Source | Target | Thumbnail |",
-            "|-------|--------|--------|-----------|",
+            "| Model | Original | GLB | USDZ | DAE | OBJ | STL |",
+            "|-------|:--------:|:---:|:----:|:---:|:---:|:---:|",
         ]
-        for png in pngs {
-            // Filename is "<name>_<source>_<target>.png" — split from the right.
-            let stem = png.deletingPathExtension().lastPathComponent
-            let parts = stem.components(separatedBy: "_")
-            guard parts.count >= 3 else { continue }
-            let target = parts.last!.uppercased()
-            let source = parts[parts.count - 2].uppercased()
-            let name = parts.dropLast(2).joined(separator: "_")
-            lines.append("| \(name) | \(source) | \(target) | ![\(stem)](\(png.lastPathComponent)) |")
+
+        for groupKey in groupOrder {
+            guard let entries = groups[groupKey] else { continue }
+            let parts = groupKey.components(separatedBy: "_")
+            let source = parts.last!.uppercased()
+            let name = parts.dropLast().joined(separator: "_")
+
+            // Row 1: thumbnails
+            let thumbs = columnOrder.map { key -> String in
+                guard let e = entries[key] else { return "—" }
+                return "![\(e.stem)](\(e.filename))"
+            }
+            lines.append("| **\(name)** (\(source)) | \(thumbs.joined(separator: " | ")) |")
+
+            // Row 2: file sizes
+            let sizes = columnOrder.map { key in entries[key]?.size ?? "—" }
+            lines.append("| | \(sizes.joined(separator: " | ")) |")
         }
 
         let markdown = lines.joined(separator: "\n") + "\n"
-        let mdURL = dir.appendingPathComponent("scorecard.md")
-        try markdown.write(to: mdURL, atomically: true, encoding: .utf8)
+        try markdown.write(
+            to: dir.appendingPathComponent("scorecard.md"),
+            atomically: true, encoding: .utf8)
 
         #expect(!pngs.isEmpty, "No thumbnails found — run render tests first")
     }
+}
+
+private func formatFileSize(_ bytes: Int) -> String {
+    if bytes >= 1_048_576 {
+        return String(format: "%.1f MB", Double(bytes) / 1_048_576)
+    } else if bytes >= 1_024 {
+        return String(format: "%.1f KB", Double(bytes) / 1_024)
+    }
+    return "\(bytes) B"
 }
